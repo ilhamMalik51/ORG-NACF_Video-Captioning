@@ -24,13 +24,13 @@ def collate_fn(batch): # add support for motion and object features
     Custom collate function for supporting batching during training and inference. 
     '''
    
-    data=[item[0] for item in batch]
-    images=torch.stack(data,0)    
-    label=[item[1] for item in batch]
+    data = [item[0] for item in batch]
+    images = torch.stack(data, 0)    
+    label = [item[1] for item in batch]
     ides = [item[2] for item in batch]
     
     motion = [item[3] for item in batch]
-    motion_batch = torch.stack(motion,0)
+    motion_batch = torch.stack(motion, 0)
     
     object_ = [item[4] for item in batch]
     object_batch = torch.stack(object_,0)
@@ -53,12 +53,18 @@ def collate_fn(batch): # add support for motion and object features
         m.append(tmp)
     m = torch.tensor(m)
     
-    return images,padVar,m,max_target_len,ides,motion_batch,object_batch
+    return images, padVar, m, max_target_len, ides, motion_batch, object_batch
         
 class CustomDataset(Dataset):
     
-    def __init__(self,cfg,appearance_feature_dict, annotation_dict , video_name_list, voc,motion_feature_dict=None,
-                     object_feature_dict=None):
+    def __init__(self, 
+                 cfg,
+                 appearance_feature_dict, 
+                 annotation_dict, 
+                 video_name_list, 
+                 voc,
+                 motion_feature_dict=None,
+                 object_feature_dict=None):
         
         self.annotation_dict = annotation_dict
         self.appearance_feature_dict = appearance_feature_dict
@@ -92,6 +98,7 @@ class CustomDataset(Dataset):
             motion_tensor = torch.zeros_like(appearance_tensor)
         else:
              motion_tensor = torch.tensor(self.motion_feature_dict[self.v_name_list[idx]]).float()
+        
         if self.object_feature_dict == None:
             object_tensor = torch.zeros_like(appearance_tensor)
         else:
@@ -128,7 +135,8 @@ class DataHandler:
             self.train_dict, self.val_dict, self.test_dict = self._msrvtt_create_dict() # Reference caption dictionaries
             # read appearance feature file
             self.appearance_feature_dict = self._read_feature_file(feature_type='appearance')
-            
+            self.motion_feature_dict = self._read_feature_file(feature_type='motion')
+
             # read motion feature file
             if cfg.model_name == 'marn':
                 if cfg.opt_motion_feature:
@@ -142,7 +150,7 @@ class DataHandler:
         self.val_name_list = list(self.val_dict.keys())
         self.test_name_list = list(self.test_dict.keys())
         
-    def _read_feature_file(self,feature_type='appearance'):
+    def _read_feature_file(self, feature_type='appearance'):
         
         feature_dict = {}
         if feature_type == 'appearance':
@@ -252,15 +260,27 @@ class DataHandler:
     
     def getDatasets(self):
         
-        if self.cfg.model_name =='marn':
-            train_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.train_dict, self.train_name_list, self.voc,
-                                      self.motion_feature_dict,self.object_feature_dict)
-            val_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.val_dict, self.val_name_list, self.voc,
-                                    self.motion_feature_dict,self.object_feature_dict)
-            test_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.test_dict, self.test_name_list, self.voc,
-                                     self.motion_feature_dict,self.object_feature_dict)
+        if self.cfg.model_name =='marn' or self.cfg.model_name == 'sa-lstm':
+            # train_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.train_dict, self.train_name_list, self.voc,
+            #                           self.motion_feature_dict, self.object_feature_dict)
             
-        if self.cfg.model_name == 'mean_pooling' or self.cfg.model_name == 'sa-lstm' or self.cfg.model_name == 'recnet':
+            # val_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.val_dict, self.val_name_list, self.voc,
+            #                         self.motion_feature_dict, self.object_feature_dict)
+            
+            # test_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.test_dict, self.test_name_list, self.voc,
+            #                          self.motion_feature_dict, self.object_feature_dict)
+
+            # NEW CODE
+            train_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.train_dict, self.train_name_list, self.voc,
+                                      self.motion_feature_dict)
+            
+            val_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.val_dict, self.val_name_list, self.voc,
+                                    self.motion_feature_dict)
+            
+            test_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.test_dict, self.test_name_list, self.voc,
+                                     self.motion_feature_dict)
+            
+        if self.cfg.model_name == 'mean_pooling' or self.cfg.model_name == 'recnet':
             train_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.train_dict, self.train_name_list, self.voc)
             
             val_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.val_dict, self.val_name_list, self.voc)
@@ -272,8 +292,8 @@ class DataHandler:
     
     def getDataloader(self,train_dset,val_dset,test_dset):
         
-        train_loader=DataLoader(train_dset,batch_size = self.cfg.batch_size, num_workers = 8,shuffle = True,
-                        collate_fn = collate_fn, drop_last=True)
+        train_loader = DataLoader(train_dset, batch_size=self.cfg.batch_size, num_workers=8, shuffle=True,
+                        collate_fn=collate_fn, drop_last=True)
 
         val_loader = DataLoader(val_dset,batch_size = 10, num_workers = 8,shuffle = False,collate_fn = collate_fn,
                          drop_last=False)

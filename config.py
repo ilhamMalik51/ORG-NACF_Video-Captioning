@@ -117,6 +117,8 @@ class Path:
             if cfg.appearance_feature_extractor == 'resnet101':
                 self.appearance_feature_file = os.path.join(self.feature_path,'MSRVTT_APPEARANCE_RESNET101_28.hdf5')
 
+            self.motion_feature_file = os.path.join(self.feature_path,'MSRVTT_MOTION_RESNEXT101.hdf5')
+
             self.val_id_list = list(range(6513,7010))
             self.train_id_list = list(range(0,6513))
             self.test_id_list = list(range(7010,10000))
@@ -189,41 +191,47 @@ class ConfigSALSTM:
     '''
     Hyperparameter settings for Soft Attention based LSTM (SA-LSTM) model.
     '''
-    def __init__(self,model_name='sa-lstm',opt_encoder=False):
+    def __init__(self,model_name='sa-lstm', opt_encoder=True):
         self.model_name = model_name
         
         #Device configuration
         self.cuda_device_id = 0
         if torch.cuda.is_available():
-            self.device = torch.device('cuda:'+str(self.cuda_device_id)) 
+            self.device = torch.device('cuda:' + str(self.cuda_device_id)) 
         else:
             self.device = torch.device('cpu')
         
         #Dataloader configuration
         self.dataset = 'msvd' 
-        self.batch_size = 100 #suitable 
+        self.batch_size = 32 #suitable 
         self.val_batch_size = 10
         self.opt_truncate_caption = True
-        self.max_caption_length = 30
+        self.max_caption_length = 26
         
         
         #Encoder configuration
-        self.appearance_feature_extractor = 'inceptionresnetv2'  
+        self.appearance_feature_extractor = 'inceptionresnetv2'
+        self.motion_feature_extractor = 'resnext101'
+        self.frame_len = 28
+        self.motion_depth = 16  
         self.appearance_input_size = 1536
         self.appearance_projected_size = 512
+        self.motion_input_size = 2048
+        self.motion_projected_size = 512
         self.frame_len = 28
         self.opt_encoder = opt_encoder
         
         
         #Decoder configuration
         self.decoder_type = 'lstm'
-        self.embedding_size = 468 # word embedding size
+        self.embedding_size = 512 # word embedding size
         if self.opt_encoder:
             self.feat_size =  self.appearance_projected_size
         else:
             self.feat_size = self.appearance_input_size 
-         
-        self.decoder_input_size = self.feat_size + self.embedding_size
+        
+        self.feat_size = self.appearance_projected_size
+        self.decoder_input_size = self.appearance_projected_size + self.motion_projected_size + self.embedding_size
         self.decoder_hidden_size = 512  #Hidden size of decoder LSTM
         self.attn_size = 128  # attention bottleneck
         self.n_layers = 1
