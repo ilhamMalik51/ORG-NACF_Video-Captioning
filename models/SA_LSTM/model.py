@@ -357,28 +357,38 @@ class SALSTM(nn.Module):
     
     
     @torch.no_grad()
-    def GreedyDecoding(self,features,max_length=15):
+    def GreedyDecoding(self, features, motion_features, max_length=15):
         batch_size = features.size()[0]
         features = features.to(self.device)
+        motion_features = motion_features.to(self.device)
         
         if self.cfg.opt_encoder:
-            features = self.encoder(features) #need to make optional
+            features, motion_features = self.encoder(features, motion_features) #need to make optional
+        
         decoder_input = torch.LongTensor([[self.cfg.SOS_token for _ in range(batch_size)]]).to(self.device)
         decoder_hidden = torch.zeros(self.cfg.n_layers, batch_size,
                                       self.cfg.decoder_hidden_size).to(self.device)
+        
         if self.cfg.decoder_type == 'lstm':
             decoder_hidden = (decoder_hidden,decoder_hidden)
+
         caption = []
         attention_values = []
+
         for _ in range(max_length):
-            decoder_output, decoder_hidden,attn_values = self.decoder(decoder_input, 
-                                                            decoder_hidden,features.float())
+            decoder_output, decoder_hidden, attn_values = self.decoder(decoder_input, 
+                                                                       decoder_hidden,
+                                                                       features.float(),
+                                                                       motion_features.float(),
+                                                                       )
             _, topi = decoder_output.squeeze(0).topk(1)
             decoder_input = torch.LongTensor([[topi[i][0] for i in range(batch_size)]]).to(self.device)
             caption.append(topi.squeeze(1).cpu())
             attention_values.append(attn_values.squeeze(2))
+
         caption = torch.stack(caption,0).permute(1,0)
         caps_text = []
+
         for dta in caption:
             tmp = []
             for token in dta:
@@ -388,10 +398,18 @@ class SALSTM(nn.Module):
                     tmp.append(self.voc.index2word[token.item()])
             tmp = ' '.join(x for x in tmp)
             caps_text.append(tmp)
+
         return caption,caps_text, torch.stack(attention_values,0).cpu().numpy()
     
     @torch.no_grad()
-    def BeamDecoding(self,feats, width, alpha=0.,max_caption_len = 15):
+    def BeamDecoding(self, 
+                     feats, 
+                     motion_feats, 
+                     width, 
+                     alpha=0.,
+                     max_caption_len = 15
+                     ):
+        
         batch_size = feats.size(0)
         vocab_size = self.voc.num_words
         
@@ -402,7 +420,7 @@ class SALSTM(nn.Module):
         pfunc = np.vectorize(lambda t: '' if t == 'PAD' else t) # to transform PAD to null string
         
         if self.cfg.opt_encoder:
-            feats = self.encoder(feats) 
+            feats, motion_feats = self.encoder(feats, motion_feats) 
 
         hidden = torch.zeros(self.cfg.n_layers, batch_size, self.cfg.decoder_hidden_size).to(self.device)
         if self.cfg.decoder_type == 'lstm':
@@ -415,17 +433,22 @@ class SALSTM(nn.Module):
         EOS_idx = self.cfg.EOS_token
 
         output_list = [ [[]] for _ in range(batch_size) ]
+        
         for t in range(max_caption_len + 1):
             beam_output_list = [] # width x ( 1, 100 )
             normalized_beam_output_list = [] # width x ( 1, 100 )
+            
             if self.cfg.decoder_type == "lstm":
                 beam_hidden_list = ( [], [] ) # 2 * width x ( 1, 100, 512 )
             else:
                 beam_hidden_list = [] # width x ( 1, 100, 512 )
+            
             next_output_list = [ [] for _ in range(batch_size) ]
+            
             assert len(input_list) == len(hidden_list) == len(cum_prob_list)
+            
             for i, (input, hidden, cum_prob) in enumerate(zip(input_list, hidden_list, cum_prob_list)):
-                output, next_hidden, _ = self.decoder(input, hidden, feats) # need to check
+                output, next_hidden, _ = self.decoder(input, hidden, feats, motion_feats) # need to check
 
                 caption_list = [ output_list[b][i] for b in range(batch_size)]
                 EOS_mask = [ 0. if EOS_idx in [ idx.item() for idx in caption ] else 1. for caption in caption_list ]
@@ -447,6 +470,7 @@ class SALSTM(nn.Module):
                     beam_hidden_list[1].append(next_hidden[1])
                 else:
                     beam_hidden_list.append(next_hidden)
+
             beam_output_list = torch.cat(beam_output_list, dim=1) # ( 100, n_vocabs * width )
             normalized_beam_output_list = torch.cat(normalized_beam_output_list, dim=1)
             beam_topk_output_index_list = normalized_beam_output_list.argsort(dim=1, descending=True)[:, :width] # ( 100, width )
@@ -454,13 +478,17 @@ class SALSTM(nn.Module):
             topk_output_index = beam_topk_output_index_list % vocab_size # ( 100, width )
 
             topk_output_list = [ topk_output_index[:, i] for i in range(width) ] # width * ( 100, )
+            
             if self.cfg.decoder_type == "lstm":
                 topk_hidden_list = (
                     [ [] for _ in range(width) ],
                     [ [] for _ in range(width) ]) # 2 * width * (1, 100, 512)
             else:
                 topk_hidden_list = [ [] for _ in range(width) ] # width * ( 1, 100, 512 )
+            
+
             topk_cum_prob_list = [ [] for _ in range(width) ] # width * ( 100, )
+            
             for i, (beam_index, output_index) in enumerate(zip(topk_beam_index, topk_output_index)):
                 for k, (bi, oi) in enumerate(zip(beam_index, output_index)):
                     if self.cfg.decoder_type == "lstm":
@@ -470,9 +498,11 @@ class SALSTM(nn.Module):
                         topk_hidden_list[k].append(beam_hidden_list[bi][:, i, :])
                     topk_cum_prob_list[k].append(beam_output_list[i][vocab_size * bi + oi])
                     next_output_list[i].append(output_list[i][bi] + [ oi ])
+            
             output_list = next_output_list
 
             input_list = [ topk_output.unsqueeze(0) for topk_output in topk_output_list ] # width * ( 1, 100 )
+            
             if self.cfg.decoder_type == "lstm":
                 hidden_list = (
                     [ torch.stack(topk_hidden, dim=1) for topk_hidden in topk_hidden_list[0] ],
@@ -480,6 +510,7 @@ class SALSTM(nn.Module):
                 hidden_list = [ ( hidden, context ) for hidden, context in zip(*hidden_list) ]
             else:
                 hidden_list = [ torch.stack(topk_hidden, dim=1) for topk_hidden in topk_hidden_list ] # width * ( 1, 100, 512 )
+
             cum_prob_list = [ torch.cuda.FloatTensor(topk_cum_prob) for topk_cum_prob in topk_cum_prob_list ] # width * ( 100, )
 
         SOS_idx = self.cfg.SOS_token

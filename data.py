@@ -291,13 +291,13 @@ class DataHandler:
         return train_dset, val_dset, test_dset
     
     def getDataloader(self,train_dset,val_dset,test_dset):
-        
-        train_loader = DataLoader(train_dset, batch_size=self.cfg.batch_size, num_workers=8, shuffle=True,
+        ## NUM WORKER GET WARNINGS IN COLLAB USING TPU
+        train_loader = DataLoader(train_dset, batch_size=self.cfg.batch_size, num_workers=2, shuffle=True,
                         collate_fn=collate_fn, drop_last=True)
 
-        val_loader = DataLoader(val_dset,batch_size = 10, num_workers = 8,shuffle = False,collate_fn = collate_fn,
+        val_loader = DataLoader(val_dset,batch_size = 10, num_workers = 2,shuffle = False,collate_fn = collate_fn,
                          drop_last=False)
-        test_loader = DataLoader(test_dset,batch_size = 10, num_workers = 8,shuffle = False,collate_fn = collate_fn,
+        test_loader = DataLoader(test_dset,batch_size = 10, num_workers = 2,shuffle = False,collate_fn = collate_fn,
                          drop_last=False)
         
         return train_loader,val_loader,test_loader
