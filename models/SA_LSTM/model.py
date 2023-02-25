@@ -399,7 +399,7 @@ class SALSTM(nn.Module):
             tmp = ' '.join(x for x in tmp)
             caps_text.append(tmp)
 
-        return caption,caps_text, torch.stack(attention_values,0).cpu().numpy()
+        return caption, caps_text, torch.stack(attention_values,0).cpu().numpy()
     
     @torch.no_grad()
     def BeamDecoding(self, 

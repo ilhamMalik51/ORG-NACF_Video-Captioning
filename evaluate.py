@@ -43,7 +43,7 @@ class Evaluator:
                     
                 if self.cfg.model_name == 'sa-lstm':
                     if self.decoding_type == 'greedy':
-                        cap,cap_txt,_ = model.GreedyDecoding(features.to(self.cfg.device),
+                        cap, cap_txt, _ = model.GreedyDecoding(features.to(self.cfg.device),
                                                              motion_feat.to(self.cfg.device),)
                     if self.decoding_type == 'beam':
                         cap_txt = model.BeamDecoding(features.to(self.cfg.device), 
