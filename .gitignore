@@ -1,3 +1,7 @@
+# pretrained big files
+/gloVe/embs_npa.npy
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -271,33 +271,70 @@ class DataHandler:
             #                          self.motion_feature_dict, self.object_feature_dict)
 
             # NEW CODE
-            train_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.train_dict, self.train_name_list, self.voc,
-                                      self.motion_feature_dict)
+            train_dset = CustomDataset(self.cfg,
+                                       self.appearance_feature_dict, 
+                                       self.train_dict, 
+                                       self.train_name_list, 
+                                       self.voc,
+                                       self.motion_feature_dict)
             
-            val_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.val_dict, self.val_name_list, self.voc,
-                                    self.motion_feature_dict)
-            
-            test_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.test_dict, self.test_name_list, self.voc,
+            val_dset = CustomDataset(self.cfg, 
+                                     self.appearance_feature_dict, 
+                                     self.val_dict, 
+                                     self.val_name_list, 
+                                     self.voc,
                                      self.motion_feature_dict)
             
+            test_dset = CustomDataset(self.cfg,
+                                      self.appearance_feature_dict, 
+                                      self.test_dict, 
+                                      self.test_name_list,
+                                      self.voc,
+                                      self.motion_feature_dict)
+            
         if self.cfg.model_name == 'mean_pooling' or self.cfg.model_name == 'recnet':
-            train_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.train_dict, self.train_name_list, self.voc)
+            train_dset = CustomDataset(self.cfg,
+                                       self.appearance_feature_dict, 
+                                       self.train_dict, 
+                                       self.train_name_list, 
+                                       self.voc)
             
-            val_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.val_dict, self.val_name_list, self.voc)
+            val_dset = CustomDataset(self.cfg,
+                                     self.appearance_feature_dict, 
+                                     self.val_dict, 
+                                     self.val_name_list, 
+                                     self.voc)
             
-            test_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.test_dict, self.test_name_list, self.voc)
+            test_dset = CustomDataset(self.cfg,
+                                      self.appearance_feature_dict, 
+                                      self.test_dict, 
+                                      self.test_name_list, 
+                                      self.voc)
             
             
         return train_dset, val_dset, test_dset
     
     def getDataloader(self,train_dset,val_dset,test_dset):
         ## NUM WORKER GET WARNINGS IN COLLAB USING TPU
-        train_loader = DataLoader(train_dset, batch_size=self.cfg.batch_size, num_workers=8, shuffle=True,
-                        collate_fn=collate_fn, drop_last=True)
+        train_loader = DataLoader(train_dset, 
+                                  batch_size=self.cfg.batch_size, 
+                                  num_workers=8, 
+                                  shuffle=True,
+                                  collate_fn=collate_fn, 
+                                  drop_last=True)
 
-        val_loader = DataLoader(val_dset,batch_size = 10, num_workers=8, shuffle = False,collate_fn = collate_fn,
-                         drop_last=False)
-        test_loader = DataLoader(test_dset,batch_size = 10, num_workers=8 ,shuffle = False,collate_fn = collate_fn,
-                         drop_last=False)
+        val_loader = DataLoader(val_dset, 
+                                batch_size = 10, 
+                                num_workers=8, 
+                                shuffle = False,
+                                collate_fn = collate_fn,
+                                drop_last=False)
+        
+        test_loader = DataLoader(test_dset, 
+                                 batch_size = 10, 
+                                 num_workers=8,
+                                 shuffle = False,
+                                 collate_fn = collate_fn,
+                                 drop_last=False)
         
         return train_loader,val_loader,test_loader

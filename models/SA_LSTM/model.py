@@ -34,7 +34,7 @@ class Encoder(nn.Module):
         Encoder module. Project the video feature into a different space which will be 
         send to decoder.
         Argumets:
-          input_size : CNN extracted feature size. For Densenet 1920, For inceptionv4 1536
+          input_size : CNN extracted feature size. For ResNet 2048, For inceptionv4 1536
           output_size : Dimention of projected space.
         '''
         
@@ -80,8 +80,7 @@ class TemporalAttention(nn.Module):
     def forward(self, hidden, feats):
         '''
         shape of hidden (hidden_size) (batch,hidden_size) #(100,512)
-        shape of feats (batch size,
-        ,feat_size)  #(100,40,1536)
+        shape of feats (batch size, ,feat_size)  #(100, 40, 1536)
         '''
         Wh = self.decoder_projection(hidden)  
         Uv = self.encoder_projection(feats)   
@@ -95,7 +94,7 @@ class TemporalAttention(nn.Module):
 
 class DecoderRNN(nn.Module):
     
-    def __init__(self,cfg,voc):
+    def __init__(self, cfg, voc):
         super(DecoderRNN, self).__init__()
         '''
         Decoder, Basically a language model.
@@ -119,15 +118,17 @@ class DecoderRNN(nn.Module):
         self.decoder_type = cfg.decoder_type
 
         # Define layers
-        self.embedding = nn.Embedding(voc.num_words, cfg.embedding_size)
+        self.embedding = nn.Embedding.from_pretrained(torch.from_numpy(voc.gloVe_embedding).float())
         self.attention = TemporalAttention(cfg)
         self.embedding_dropout = nn.Dropout(cfg.dropout)
+
         if self.decoder_type == 'gru':
             self.rnn = nn.GRU(input_size=cfg.decoder_input_size, hidden_size=cfg.decoder_hidden_size,
                               num_layers=self.n_layers, dropout=self.rnn_dropout)
         else:
             self.rnn = nn.LSTM(input_size=cfg.decoder_input_size, hidden_size=cfg.decoder_hidden_size,
                            num_layers=self.n_layers, dropout=self.rnn_dropout)
+            
         self.out = nn.Linear(cfg.decoder_hidden_size, self.output_size)
 
     
@@ -177,15 +178,20 @@ class SALSTM(nn.Module):
         
         if cfg.opt_encoder:
             self.encoder = Encoder(cfg).to(cfg.device)
-            self.enc_optimizer = optim.Adam(self.encoder.parameters(), lr=cfg.encoder_lr)
+            self.enc_optimizer = optim.Adam(self.encoder.parameters(), 
+                                            lr=cfg.encoder_lr)
 
-        self.decoder = DecoderRNN(cfg,voc).to(cfg.device)
-        self.dec_optimizer = optim.Adam(self.decoder.parameters(), lr=cfg.decoder_lr, weight_decay=cfg.weight_decay, amsgrad=True)
+        self.decoder = DecoderRNN(cfg, voc).to(cfg.device)
+        self.dec_optimizer = optim.Adam(self.decoder.parameters(), 
+                                        lr=cfg.decoder_lr, 
+                                        weight_decay=cfg.weight_decay, 
+                                        amsgrad=True)
     
         self.teacher_forcing_ratio = cfg.teacher_forcing_ratio
         self.print_every = cfg.print_every
         self.clip = cfg.clip
         self.device = cfg.device
+
         if cfg.opt_param_init:
             self.init_params()
         
@@ -243,6 +249,7 @@ class SALSTM(nn.Module):
         for data in dataloader:
             appearance_features, targets, mask, max_length, _, motion_features, _ = data
             use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio else False
+            
             loss = self.train_iter(utils, 
                                    appearance_features,
                                    motion_features, 
@@ -310,11 +317,12 @@ class SALSTM(nn.Module):
         # Forward pass through encoder
         decoder_input = torch.LongTensor([[self.cfg.SOS_token for _ in range(self.cfg.batch_size)]])
         decoder_input = decoder_input.to(self.device)
-        decoder_hidden = torch.zeros(self.cfg.n_layers, self.cfg.batch_size,
-                                      self.cfg.decoder_hidden_size).to(self.device)
+        decoder_hidden = torch.zeros(self.cfg.n_layers, 
+                                     self.cfg.batch_size,
+                                     self.cfg.decoder_hidden_size).to(self.device)
         
         if self.cfg.decoder_type == 'lstm':
-            decoder_hidden = (decoder_hidden,decoder_hidden)
+            decoder_hidden = (decoder_hidden, decoder_hidden)
             
         # Forward batch of sequences through decoder one time step at a time
         if use_teacher_forcing:

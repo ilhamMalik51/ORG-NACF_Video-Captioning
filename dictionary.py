@@ -6,17 +6,21 @@ Author:  Nasibullah (nasibullah104@gmail.com)
 
 import pickle
 import os
+import numpy as np
 
 class Vocabulary:
     
-    def __init__(self, cfg):
+    def __init__(self, cfg, gloVe=False):
         self.name = cfg.dataset
         self.cfg = cfg
-        self.trimmed = False
+        self.trimmed = True
         self.word2index = {"PAD":cfg.PAD_token,"EOS":cfg.EOS_token,"SOS":cfg.SOS_token, "UNK":cfg.UNK_token}
         self.word2count = {}
         self.index2word = {cfg.PAD_token:"PAD",cfg.EOS_token:"EOS",cfg.SOS_token:"SOS", cfg.UNK_token:"UNK"}
         self.num_words = 2
+
+        if gloVe is True:
+            self.gloVe_embedding = np.load('gloVe\embs_npa.npy')
         
     def addSentence(self,sentence): #Add Sentence to vocabulary
         for word in sentence.split(' '):
@@ -25,16 +29,22 @@ class Vocabulary:
     def addWord(self, word):  # Add words to vocabulary
         if word not in self.word2index:
             self.word2index[word] = self.num_words
+
             if self.trimmed == False:
                 self.word2count[word] = 1
+
             self.index2word[self.num_words] = word
             self.num_words += 1
+
         else:
             if self.trimmed == False:
                 self.word2count[word] += 1
             
-    def save(self,word2index_dic = 'word2index_dic.p', index2word_dic = 'index2word_dic.p',
-         word2count_dic = 'word2count_dic.p'):
+    def save(self,
+             word2index_dic = 'word2index_dic.p',
+             index2word_dic = 'index2word_dic.p',
+             word2count_dic = 'word2count_dic.p'
+             ):
 
         w2i = os.path.join('Saved',self.name+'_'+word2index_dic)
         i2w = os.path.join('Saved',self.name+'_'+index2word_dic)
@@ -53,8 +63,11 @@ class Vocabulary:
 
 
 
-    def load(self, word2index_dic = 'word2index_dic.p', index2word_dic = 'index2word_dic.p',
-             word2count_dic = 'word2count_dic.p'):
+    def load(self, 
+             word2index_dic = 'word2index_dic.p', 
+             index2word_dic = 'index2word_dic.p',
+             word2count_dic = 'word2count_dic.p'
+             ):
 
         w2i = os.path.join('Saved',self.name+'_'+word2index_dic)
         i2w = os.path.join('Saved',self.name+'_'+index2word_dic)
@@ -80,6 +93,7 @@ class Vocabulary:
         if self.trimmed:
             print('Already trimmed before')
             return 0
+        
         self.trimmed = True
         
         keep_words = []
@@ -93,9 +107,24 @@ class Vocabulary:
         ))
 
         # Reinitialize dictionaries
-        self.word2index = {"PAD":self.cfg.PAD_token,"EOS":self.cfg.EOS_token,"SOS":self.cfg.SOS_token, "UNK":self.cfg.UNK_token}
+
+        # PAD_token = 0
+        # EOS_token = 2
+        # SOS_token = 1
+        # UNK_token = 3
+
+        self.word2index = {"PAD":self.cfg.PAD_token, 
+                           "EOS":self.cfg.EOS_token, 
+                           "SOS":self.cfg.SOS_token, 
+                           "UNK":self.cfg.UNK_token}
+        
         #self.word2count = {}
-        self.index2word = {self.cfg.PAD_token:"PAD",self.cfg.EOS_token:"EOS",self.cfg.SOS_token:"SOS", self.cfg.UNK_token:"UNK"}
+
+        self.index2word = {self.cfg.PAD_token:"PAD", 
+                           self.cfg.EOS_token:"EOS", 
+                           self.cfg.SOS_token:"SOS", 
+                           self.cfg.UNK_token:"UNK"}
+        
         self.num_words = 4
 
         for word in keep_words:

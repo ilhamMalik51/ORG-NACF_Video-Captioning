@@ -224,7 +224,7 @@ class ConfigSALSTM:
         
         #Decoder configuration
         self.decoder_type = 'lstm'
-        self.embedding_size = 512 # word embedding size
+        self.embedding_size = 300 # word embedding size using gloVe
         if self.opt_encoder:
             self.feat_size =  self.appearance_projected_size
         else:
@@ -239,10 +239,8 @@ class ConfigSALSTM:
         self.rnn_dropout = 0.4
         self.opt_param_init = False
         self.beam_length = 5
-       
         
         #Training configuration
-        
         self.encoder_lr = 1e-4
         self.decoder_lr = 1e-4
         self.teacher_forcing_ratio = 1.0 #
@@ -254,16 +252,13 @@ class ConfigSALSTM:
         self.lr_decay_patience = 5
         self.weight_decay = 1e-5
         self.reg_lambda = 0.
-        
 
         #Vocabulary configuration
         self.SOS_token = 1
         self.EOS_token = 2
         self.PAD_token = 0
         self.UNK_token = 3
-        self.vocabulary_min_count = 5
-        
-        
+        self.vocabulary_min_count = 2   
 
 
 class ConfigRecNet:
