@@ -101,12 +101,12 @@ class Path:
         if cfg.dataset == 'msrvtt':
             self.local_path = os.path.join(working_path,'MSRVTT')
             self.video_path = '/media/nasibullah/Ubuntu/DataSets/MSRVTT/'
-            self.caption_path = os.path.join(self.local_path,'captions')
-            self.feature_path = os.path.join(self.local_path,'features')
+            self.caption_path = os.path.join(self.local_path, 'captions')
+            self.feature_path = os.path.join(self.local_path, 'features')
             
-            self.category_file_path = os.path.join(self.caption_path,'category.txt')
-            self.train_val_annotation_file = os.path.join(self.caption_path,'train_val_videodatainfo.json')
-            self.test_annotation_file = os.path.join(self.caption_path,'test_videodatainfo.json')
+            self.category_file_path = os.path.join(self.caption_path, 'category.txt')
+            self.train_val_annotation_file = os.path.join(self.caption_path, 'train_val_videodatainfo.json')
+            self.test_annotation_file = os.path.join(self.caption_path, 'test_videodatainfo.json')
             
             if cfg.appearance_feature_extractor == 'inceptionv4':
                 self.appearance_feature_file = os.path.join(self.feature_path,'MSRVTT_APPEARANCE_INCEPTIONV4_28.hdf5')

@@ -51,6 +51,7 @@ def collate_fn(batch): # add support for motion and object features
             else:
                 tmp.append(1)
         m.append(tmp)
+        
     m = torch.tensor(m)
     
     return images, padVar, m, max_target_len, ides, motion_batch, object_batch
@@ -86,10 +87,12 @@ class CustomDataset(Dataset):
             try:
                 anno_index.append(self.voc.word2index[word])
             except:
-                pass 
+                pass
+
         if self.opt_truncate_caption:
             if len(anno_index)> self.max_caption_length:
                 anno_index = anno_index[:self.max_caption_length]
+                
         anno_index = anno_index + [self.voc.cfg.EOS_token]
         
         appearance_tensor = torch.tensor(self.appearance_feature_dict[self.v_name_list[idx]]).float()
@@ -229,6 +232,7 @@ class DataHandler:
         #         test_dict[datap['video_id']] = [datap['caption']]
 
         # MODIFIED CODE
+
         train_id_list = [i for i in range(0, 80)]
         val_id_list = [i for i in range(80, 90)]
         test_id_list = [i for i in range(90, 100)]
@@ -256,7 +260,7 @@ class DataHandler:
                 else:
                     test_dict[datap['video_id']] = [datap['caption']]
 
-        return train_dict,val_dict,test_dict
+        return train_dict, val_dict, test_dict
     
     def getDatasets(self):
         
@@ -314,27 +318,28 @@ class DataHandler:
             
         return train_dset, val_dset, test_dset
     
-    def getDataloader(self,train_dset,val_dset,test_dset):
+    def getDataloader(self, train_dset, val_dset, test_dset):
         ## NUM WORKER GET WARNINGS IN COLLAB USING TPU
         train_loader = DataLoader(train_dset, 
                                   batch_size=self.cfg.batch_size, 
-                                  num_workers=8, 
+                                #   num_workers=8, 
                                   shuffle=True,
                                   collate_fn=collate_fn, 
-                                  drop_last=True)
+                                  drop_last=True
+                                  )
 
         val_loader = DataLoader(val_dset, 
                                 batch_size = 10, 
-                                num_workers=8, 
+                                # num_workers=8, 
                                 shuffle = False,
                                 collate_fn = collate_fn,
                                 drop_last=False)
         
         test_loader = DataLoader(test_dset, 
                                  batch_size = 10, 
-                                 num_workers=8,
+                                #  num_workers=8,
                                  shuffle = False,
                                  collate_fn = collate_fn,
                                  drop_last=False)
         
-        return train_loader,val_loader,test_loader
+        return train_loader, val_loader, test_loader
