@@ -233,9 +233,9 @@ class DataHandler:
 
         # MODIFIED CODE
 
-        train_id_list = [i for i in range(0, 80)]
-        val_id_list = [i for i in range(80, 90)]
-        test_id_list = [i for i in range(90, 100)]
+        train_id_list = [i for i in range(0, 850)]
+        val_id_list = [i for i in range(850, 900)]
+        test_id_list = [i for i in range(900, 1000)]
 
         train_dict = {}
         val_dict = {}

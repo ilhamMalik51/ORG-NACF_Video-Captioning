@@ -28,7 +28,7 @@ import copy
      
 class Encoder(nn.Module):
     
-    def __init__(self,cfg):
+    def __init__(self, cfg):
         super(Encoder,self).__init__()
         '''
         Encoder module. Project the video feature into a different space which will be 
@@ -118,7 +118,9 @@ class DecoderRNN(nn.Module):
         self.decoder_type = cfg.decoder_type
 
         # Define layers
-        self.embedding = nn.Embedding.from_pretrained(torch.from_numpy(voc.gloVe_embedding).float())
+        # self.embedding = nn.Embedding.from_pretrained(torch.from_numpy(voc.gloVe_embedding).float())
+
+        self.embedding = nn.Embedding(voc.num_words, cfg.embedding_size)
         self.attention = TemporalAttention(cfg)
         self.embedding_dropout = nn.Dropout(cfg.dropout)
 
