@@ -118,9 +118,12 @@ class DecoderRNN(nn.Module):
         self.decoder_type = cfg.decoder_type
 
         # Define layers
-        # self.embedding = nn.Embedding.from_pretrained(torch.from_numpy(voc.gloVe_embedding).float())
+        self.embedding = nn.Embedding.from_pretrained(
+            torch.from_numpy(voc.gloVe_embedding).float(),
+            freeze=False,
+            padding_idx=0)
 
-        self.embedding = nn.Embedding(voc.num_words, cfg.embedding_size)
+        # self.embedding = nn.Embedding(voc.num_words, cfg.embedding_size)
         self.attention = TemporalAttention(cfg)
         self.embedding_dropout = nn.Dropout(cfg.dropout)
 
@@ -221,7 +224,7 @@ class SALSTM(nn.Module):
         else:
             print('File not found Error..')
 
-    def save(self, encoder_path,decoder_path):
+    def save(self, encoder_path, decoder_path):
         if os.path.exists(encoder_path) and os.path.exists(decoder_path):
             torch.save(self.encoder.state_dict(),encoder_path)
             torch.save(self.decoder.state_dict(),decoder_path)

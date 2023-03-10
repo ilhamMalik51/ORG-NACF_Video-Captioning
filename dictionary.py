@@ -13,14 +13,14 @@ class Vocabulary:
     def __init__(self, cfg, gloVe=False):
         self.name = cfg.dataset
         self.cfg = cfg
-        self.trimmed = False
+        self.trimmed = True
         self.word2index = {"PAD":cfg.PAD_token,"EOS":cfg.EOS_token,"SOS":cfg.SOS_token, "UNK":cfg.UNK_token}
         self.word2count = {}
         self.index2word = {cfg.PAD_token:"PAD",cfg.EOS_token:"EOS",cfg.SOS_token:"SOS", cfg.UNK_token:"UNK"}
         self.num_words = 2
 
         if gloVe is True:
-            glove_path = os.path.join('gloVe', 'embs_npa.npy')
+            glove_path = os.path.join('gloVe', 'glove_init_1000.npy')
             self.gloVe_embedding = np.load(glove_path)
         
     def addSentence(self,sentence): #Add Sentence to vocabulary
@@ -50,6 +50,7 @@ class Vocabulary:
         w2i = os.path.join('Saved',self.name+'_'+word2index_dic)
         i2w = os.path.join('Saved',self.name+'_'+index2word_dic)
         w2c = os.path.join('Saved',self.name+'_'+word2count_dic)
+        
         try:
             with open(w2i, 'wb') as fp:
                 pickle.dump(self.word2index, fp, protocol=pickle.HIGHEST_PROTOCOL)
@@ -119,7 +120,7 @@ class Vocabulary:
                            "SOS":self.cfg.SOS_token, 
                            "UNK":self.cfg.UNK_token}
         
-        #self.word2count = {}
+        # self.word2count = {}
 
         self.index2word = {self.cfg.PAD_token:"PAD", 
                            self.cfg.EOS_token:"EOS", 

@@ -11,7 +11,12 @@ import pickle
 
 class Evaluator:
     
-    def __init__(self,model,dataloader,path,cfg,reference_dict,decoding_type = 'greedy'):
+    def __init__(self, 
+                 model, 
+                 dataloader,
+                 path,
+                 cfg,reference_dict,
+                 decoding_type = 'greedy'):
         '''
         Decoding type : {'greedy','beam','beam_beta}
         '''
