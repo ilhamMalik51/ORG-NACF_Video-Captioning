@@ -13,7 +13,7 @@ class Vocabulary:
     def __init__(self, cfg, gloVe=False):
         self.name = cfg.dataset
         self.cfg = cfg
-        self.trimmed = True
+        self.trimmed = False
         self.word2index = {"PAD":cfg.PAD_token,"EOS":cfg.EOS_token,"SOS":cfg.SOS_token, "UNK":cfg.UNK_token}
         self.word2count = {}
         self.index2word = {cfg.PAD_token:"PAD",cfg.EOS_token:"EOS",cfg.SOS_token:"SOS", cfg.UNK_token:"UNK"}

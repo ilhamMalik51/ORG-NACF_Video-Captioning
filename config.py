@@ -90,7 +90,7 @@ class ConfigSALSTM:
         
         #Dataloader configuration
         self.dataset = 'msvd' 
-        self.batch_size = 128 #suitable 
+        self.batch_size = 32 #suitable 
         self.val_batch_size = 10
         self.opt_truncate_caption = True
         self.max_caption_length = 30
