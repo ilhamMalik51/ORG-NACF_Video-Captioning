@@ -3,8 +3,6 @@
 /MSRVTT/features/MSRVTT_APPEARANCE_INCEPTIONRESNETV2_28.hdf5
 /MSRVTT/features/MSRVTT_MOTION_RESNEXT101.hdf5
 
-*.hdf5
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -138,3 +136,4 @@ MSRVTT/features/image_inceptionresnetv2_imagenet_fps_max60_100.hdf5
 MSRVTT/features/MSRVTT_APPEARANCE_INCEPTIONRESNETV2_28.hdf5
 MSRVTT/features/MSRVTT_MOTION_RESNEXT101.hdf5
 gloVe/vocab_npa.npy
+*.hdf5
