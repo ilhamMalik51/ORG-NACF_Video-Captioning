@@ -3,7 +3,7 @@
 /MSRVTT/features/MSRVTT_APPEARANCE_INCEPTIONRESNETV2_28.hdf5
 /MSRVTT/features/MSRVTT_MOTION_RESNEXT101.hdf5
 
-
+*.hdf5
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
