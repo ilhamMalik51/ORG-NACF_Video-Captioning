@@ -63,8 +63,6 @@ class Vocabulary:
         except:
             print('Path Error, Verify the path of the filename is correct')
 
-
-
     def load(self, 
              word2index_dic = 'word2index_dic.p', 
              index2word_dic = 'index2word_dic.p',

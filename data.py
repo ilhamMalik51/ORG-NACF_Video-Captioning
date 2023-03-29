@@ -80,7 +80,6 @@ class CustomDataset(Dataset):
         return len(self.v_name_list)
     
     def __getitem__(self,idx): 
-        
         anno = random.choice(self.annotation_dict[self.v_name_list[idx]])
         anno_index = []
         for word in anno.split(' '):
@@ -90,7 +89,7 @@ class CustomDataset(Dataset):
                 pass
 
         if self.opt_truncate_caption:
-            if len(anno_index)> self.max_caption_length:
+            if len(anno_index) > self.max_caption_length:
                 anno_index = anno_index[:self.max_caption_length]
                 
         anno_index = anno_index + [self.voc.cfg.EOS_token]
@@ -107,13 +106,12 @@ class CustomDataset(Dataset):
         else:
             object_tensor = torch.tensor(self.object_feature_dict[self.v_name_list[idx]]).float()
             
-        return appearance_tensor,anno_index, self.v_name_list[idx],motion_tensor,object_tensor
+        return appearance_tensor, anno_index, self.v_name_list[idx], motion_tensor, object_tensor
             
 
 class DataHandler:
     
     def __init__(self,cfg,path,voc):
-        
         self.voc = voc
         self.cfg = cfg
         self.path = path

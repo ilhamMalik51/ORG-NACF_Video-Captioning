@@ -74,7 +74,7 @@ class Path:
         self.saved_models_path = 'Saved'
         
             
-class ConfigSALSTM:
+class ConfigORGTRL:
     '''
     Hyperparameter settings for Soft Attention based LSTM (SA-LSTM) model.
     '''
@@ -117,12 +117,25 @@ class ConfigSALSTM:
             self.feat_size = self.appearance_input_size 
         
         self.feat_size = self.appearance_projected_size
-        self.decoder_input_size = self.appearance_projected_size + self.motion_projected_size + self.embedding_size
+        # self.decoder_input_size = self.appearance_projected_size + self.motion_projected_size + self.embedding_size
         self.decoder_hidden_size = 512  #Hidden size of decoder LSTM
-        self.attn_size = 128  # attention bottleneck
+        self.attn_size = 512  # attention bottleneck
+
+        # this size reflects the concatenation operation of
+        # mean pooled global vide features, previous language lstm hidden state,
+        # and previous word embedding
+        # this implementation STILL USE CONTEXT GLOBAL AND ATTENTION LSTM HIDDEN STATE
+        self.attention_lstm_input_size = (self.appearance_projected_size * 2) + self.decoder_hidden_size + self.embedding_size
+        
+        # this size reflects the concatenation operation of
+        # context global, context local, and attentionLSTM hidden state
+        # this implementation STILL USE CONTEXT GLOBAL AND ATTENTION LSTM HIDDEN STATE
+        self.language_lstm_input_size = (self.appearance_projected_size * 2) + self.decoder_hidden_size 
+
         self.n_layers = 1
         self.embed_dropout = 0.5
         self.rnn_dropout = 0.4
+        self.dropout = 0.5
         self.opt_param_init = False
         self.beam_length = 5
         
@@ -146,79 +159,3 @@ class ConfigSALSTM:
         self.UNK_token = 3
         self.vocabulary_min_count = 2   
        
-        
-class ConfigMARN:
-    '''
-    Hyperparameter settings for MARN model.
-    '''
-    def __init__(self,model_name='marn'):
-        
-        self.model_name = model_name
-        self.cuda_device_id = 0
-        if torch.cuda.is_available():
-            self.device = torch.device('cuda:'+str(self.cuda_device_id)) 
-        else:
-            self.device = torch.device('cpu')
-
-        
-        #Data related Configuration
-        self.dataset = 'msvd' # from set {'msvd','msrvtt'}
-        self.batch_size = 48 #suitable 
-        self.val_batch_size = 10
-        self.opt_truncate_caption = True
-        self.max_caption_length = 30
-        
-        
-        # Encoder related configuration
-        self.appearance_feature_extractor = 'inceptionresnetv2'
-        self.motion_feature_extractor = 'resnext101'
-        self.frame_len = 28
-        self.motion_depth = 16
-        self.appearance_input_size = 1536
-        self.appearance_projected_size = 512
-        self.motion_input_size = 2048
-        self.motion_projected_size = 512
-        
-        # Decoder related configuration
-        self.feat_size = self.appearance_projected_size
-        self.embedding_size = 512 # word embedding size
-        self.decoder_input_size = self.appearance_projected_size + self.motion_projected_size + self.embedding_size
-        self.decoder_type = 'lstm' # from set {lstm,gru}
-        self.decoder_hidden_size = 512
-        self.attn_size = 128
-        self.n_layers = 1
-        self.dropout = 0.5
-        self.rnn_dropout = 0.4
-        self.opt_param_init = False   # manually sets parameter initialisation strategy
-        self.beam_length = 5
-        
-        # Training related configuration
-        self.encoder_lr = 1e-4
-        self.decoder_lr = 1e-4
-        self.memory_decoder_lr = 1e-4
-        self.acl_weight = 0.1
-        self.teacher_forcing_ratio = 1.0
-        self.clip = 5 # clip the gradient to counter exploding gradient problem
-        self.print_every = 400
-        self.total_epochs = 1000
-        self.lr_reduction = 0.5
-        self.lr_reduction_step = 50
-        
-
-        #Vocabulary related configuration
-        self.SOS_token = 1
-        self.EOS_token = 2
-        self.PAD_token = 0
-        self.UNK_token = 3
-        self.vocabulary_min_count = 5
-        
-        #Attend memory decoder configuration
-        self.topk = 128
-        self.amd_bottleneck_size = 64
-        self.opt_memory_decoder = False
-        self.lamb = 0.4
-        
-    def update(self):
-        self.decoder_input_size = self.appearance_projected_size + self.motion_projected_size + self.embedding_size
-            
-  
