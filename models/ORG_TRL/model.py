@@ -402,7 +402,7 @@ class ORG_TRL(nn.Module):
             decoder_hidden_lang = (decoder_hidden, decoder_hidden)
         
         # concat the input and motion variable
-        v_features = torch.cat((input_variable, motion_variable), dim=-1) 
+        v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device) 
 
         # Forward batch of sequences through decoder one time step at a time
         if use_teacher_forcing:
