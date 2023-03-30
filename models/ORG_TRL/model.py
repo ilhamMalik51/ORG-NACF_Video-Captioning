@@ -231,11 +231,11 @@ class DecoderRNN(nn.Module):
         output, h_lang_lstm = self.language_lstm(input_lang_lstm, 
                                                  lang_hidden) # (1, 100, 512)
         
-        output = output.squeeze(0) # (100, 512)
-        output = self.out(output) # (100, num_words)
-        output = F.softmax(output, dim = 1) #(100, num_words)
+        output = output.squeeze(0) # (batch_size, features_From LSTM) (100, 512)
+        output = self.out(output) # (batch_size, vocabulary_size) (100, num_words)
+        output = F.softmax(output, dim = 1) # In Probability Value (batch_size, vocabulary_size) (100, num_words)
         
-        return output, h_lang_lstm, h_attn_lstm
+        return output, h_attn_lstm, h_lang_lstm
     
     
 class ORG_TRL(nn.Module):
@@ -407,7 +407,7 @@ class ORG_TRL(nn.Module):
         # Forward batch of sequences through decoder one time step at a time
         if use_teacher_forcing:
             for t in range(max_target_len):
-                decoder_output, decoder_hidden_lang, decoder_hidden_attn = self.decoder(decoder_input,
+                decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
                                                                                         decoder_hidden_attn,
                                                                                         decoder_hidden_lang, 
                                                                                         v_features.float())
@@ -423,7 +423,7 @@ class ORG_TRL(nn.Module):
                 n_totals += nTotal
         else:
             for t in range(max_target_len):
-                decoder_output, decoder_hidden_lang, decoder_hidden_attn = self.decoder(decoder_input,
+                decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
                                                                                         decoder_hidden_attn,
                                                                                         decoder_hidden_lang, 
                                                                                         v_features.float())
@@ -508,7 +508,7 @@ class ORG_TRL(nn.Module):
                      feats, 
                      motion_feats, 
                      width, 
-                     alpha=0.,
+                     alpha=0., #This is a diversity parameter
                      max_caption_len = 30
                      ):
         
@@ -535,11 +535,14 @@ class ORG_TRL(nn.Module):
         
         # inisialisasi variable-variable list
         input_list = [ torch.cuda.LongTensor(1, batch_size).fill_(self.cfg.SOS_token) ]
-        hidden_list = [ hidden ]
-        attn_list = [ hidden ]
 
-        # list total probabilitas yang diperoleh ?
-        # sepertinya list untuk menghitung nilai score ?
+        # variabel ini digunakan untuk menyimpan hidden list
+        # dari setiap top-k kata sebelumnya
+        hidden_list_attn = [ hidden ]
+        hidden_list_lang = [ hidden ]
+
+        # list total probabilitas yang diperoleh
+        # list untuk menyimpan nilai score
         cum_prob_list = [ torch.ones(batch_size).cuda() ]
         cum_prob_list = [ torch.log(cum_prob) for cum_prob in cum_prob_list ]
 
@@ -561,7 +564,8 @@ class ORG_TRL(nn.Module):
             
             if self.cfg.decoder_type == "lstm":
                 # inisialisasi untuk menyimpan list hidden state
-                beam_hidden_list = ( [], [] ) # 2 * width x ( 1, 100, 512 )
+                beam_hidden_list_attn = ( [], [] ) # 2 * width x ( 1, 100, 512 )
+                beam_hidden_list_lang = ( [], [] )
             else:
                 beam_hidden_list = [] # width x ( 1, 100, 512 )
             
@@ -569,13 +573,16 @@ class ORG_TRL(nn.Module):
             next_output_list = [ [] for _ in range(batch_size) ]
             
             # memeriksa semua panjang ukuran sama
-            assert len(input_list) == len(hidden_list) == len(cum_prob_list) == len(attn_list)
+            assert len(input_list) == len(hidden_list_attn) == len(hidden_list_lang) == len(cum_prob_list)
             
-            for i, (input, h_lang, h_attn, cum_prob) in enumerate(zip(input_list, hidden_list, attn_list, cum_prob_list)):
+            for i, (input, h_attn, h_lang, cum_prob) in enumerate(zip(input_list, 
+                                                                      hidden_list_attn, 
+                                                                      hidden_list_lang, 
+                                                                      cum_prob_list)):
                 
-                output, next_hidden, _ = self.decoder(input, hidden, feats, motion_feats) # need to check
+                # output, next_hidden, _ = self.decoder(input, hidden, feats, motion_feats) # need to check
 
-                output, next_hidden_lang, next_hidden_attn = self.decoder(input,
+                output, next_hidden_attn, next_hidden_lang = self.decoder(input,
                                                                           h_attn,
                                                                           h_lang, 
                                                                           v_features.float()) ## NEED TO CHECK
@@ -584,8 +591,8 @@ class ORG_TRL(nn.Module):
                 EOS_mask = [ 0. if EOS_idx in [ idx.item() for idx in caption ] else 1. for caption in caption_list ]
                 EOS_mask = torch.cuda.FloatTensor(EOS_mask)
                 EOS_mask = EOS_mask.unsqueeze(1).expand_as(output)
+                
                 output = EOS_mask * output
-
                 output += cum_prob.unsqueeze(1)
                 beam_output_list.append(output)
 
@@ -598,25 +605,35 @@ class ORG_TRL(nn.Module):
                 normalized_beam_output_list.append(normalized_output)
 
                 if self.cfg.decoder_type == "lstm":
-                    beam_hidden_list[0].append(next_hidden_lang[0])
-                    beam_hidden_list[1].append(next_hidden_lang[1])
+                    beam_hidden_list_attn[0].append(next_hidden_attn[0])
+                    beam_hidden_list_attn[1].append(next_hidden_attn[1])
+
+                    beam_hidden_list_lang[0].append(next_hidden_lang[0])
+                    beam_hidden_list_lang[1].append(next_hidden_lang[1])
                 else:
-                    beam_hidden_list.append(next_hidden)
+                    beam_hidden_list_lang.append(next_hidden_lang)
                 
                 #end for i
 
             beam_output_list = torch.cat(beam_output_list, dim=1) # ( 100, n_vocabs * width )
             normalized_beam_output_list = torch.cat(normalized_beam_output_list, dim=1)
             beam_topk_output_index_list = normalized_beam_output_list.argsort(dim=1, descending=True)[:, :width] # ( 100, width )
+
+            ## Floor division and modulus operation
             topk_beam_index = beam_topk_output_index_list // vocab_size # ( 100, width )
             topk_output_index = beam_topk_output_index_list % vocab_size # ( 100, width )
 
-            topk_output_list = [ topk_output_index[:, i] for i in range(width) ] # width * ( 100, )
+            ## Hal ini berarti akan memiliki ukuran (Batch, Width)
+            topk_output_list = [ topk_output_index[:, i] for i in range(width) ] 
             
             if self.cfg.decoder_type == "lstm":
-                topk_hidden_list = (
+                topk_hidden_list_attn = (
                     [ [] for _ in range(width) ],
                     [ [] for _ in range(width) ]) # 2 * width * (1, 100, 512)
+                
+                topk_hidden_list_lang = (
+                    [ [] for _ in range(width) ],
+                    [ [] for _ in range(width) ])
             else:
                 topk_hidden_list = [ [] for _ in range(width) ] # width * ( 1, 100, 512 )
             
@@ -626,8 +643,11 @@ class ORG_TRL(nn.Module):
             for i, (beam_index, output_index) in enumerate(zip(topk_beam_index, topk_output_index)):
                 for k, (bi, oi) in enumerate(zip(beam_index, output_index)):
                     if self.cfg.decoder_type == "lstm":
-                        topk_hidden_list[0][k].append(beam_hidden_list[0][bi][:, i, :])
-                        topk_hidden_list[1][k].append(beam_hidden_list[1][bi][:, i, :])
+                        topk_hidden_list_attn[0][k].append(beam_hidden_list_attn[0][bi][:, i, :])
+                        topk_hidden_list_attn[1][k].append(beam_hidden_list_attn[1][bi][:, i, :])
+
+                        topk_hidden_list_lang[0][k].append(beam_hidden_list_lang[0][bi][:, i, :])
+                        topk_hidden_list_lang[1][k].append(beam_hidden_list_lang[1][bi][:, i, :])
                     else:
                         topk_hidden_list[k].append(beam_hidden_list[bi][:, i, :])
 
@@ -639,10 +659,15 @@ class ORG_TRL(nn.Module):
             input_list = [ topk_output.unsqueeze(0) for topk_output in topk_output_list ] # width * ( 1, 100 )
             
             if self.cfg.decoder_type == "lstm":
-                hidden_list = (
-                    [ torch.stack(topk_hidden, dim=1) for topk_hidden in topk_hidden_list[0] ],
-                    [ torch.stack(topk_hidden, dim=1) for topk_hidden in topk_hidden_list[1] ]) # 2 * width * ( 1, 100, 512 )
-                hidden_list = [ ( hidden, context ) for hidden, context in zip(*hidden_list) ]
+                hidden_list_attn = (
+                    [ torch.stack(topk_hidden, dim=1) for topk_hidden in topk_hidden_list_attn[0] ],
+                    [ torch.stack(topk_hidden, dim=1) for topk_hidden in topk_hidden_list_attn[1] ]) # 2 * width * ( 1, 100, 512 )
+                hidden_list_attn = [ ( hidden, context ) for hidden, context in zip(*hidden_list_attn) ]
+
+                hidden_list_lang = (
+                    [ torch.stack(topk_hidden, dim=1) for topk_hidden in topk_hidden_list_lang[0] ],
+                    [ torch.stack(topk_hidden, dim=1) for topk_hidden in topk_hidden_list_lang[1] ]) # 2 * width * ( 1, 100, 512 )
+                hidden_list_lang = [ ( hidden, context ) for hidden, context in zip(*hidden_list_lang) ]
             else:
                 hidden_list = [ torch.stack(topk_hidden, dim=1) for topk_hidden in topk_hidden_list ] # width * ( 1, 100, 512 )
 
@@ -664,7 +689,6 @@ class ORG_TRL(nn.Module):
 
         for eee in captions:
             caps_text.append(' '.join(x for x in eee).strip())
-        
         
         return caps_text
     
