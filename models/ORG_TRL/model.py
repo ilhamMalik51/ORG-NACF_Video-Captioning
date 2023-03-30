@@ -90,12 +90,12 @@ class TemporalAttention(nn.Module):
 
         Wv = self.encoder_projection(v_features)
         Uh = self.decoder_projection(h_attn_lstm)
-        Uh = Uh[0].unsqueeze(1).expand_as(Wv)
+        Uh = Uh.unsqueeze(1).expand_as(Wv)
 
         Ew = self.energy_projection(torch.tanh(Wv + Uh))
-        alpha = F.softmax(Ew)
+        alpha = F.softmax(Ew, dim=1)
         
-        weighted_feats = alpha * v_features
+        weighted_feats = alpha.expand_as(v_features) * v_features
         context_global = weighted_feats.sum(dim=1)
 
         return context_global
@@ -198,25 +198,31 @@ class DecoderRNN(nn.Module):
         #                                          last_hidden_lang.size(2))
         # last_hidden_lang = last_hidden_lang[-1]
 
-        # last_hidden_attn = attn_hidden[0] if self.decoder_type=='lstm' else lang_hidden
-        # last_hidden_attn = last_hidden_attn.view(self.n_layers, 
-        #                                          last_hidden_attn.size(1), 
-        #                                          last_hidden_attn.size(2))
-        # last_hidden_attn = last_hidden_attn[-1]
-
         # global mean pooled the v features
         v_bar_features = torch.mean(v_features, dim=1, keepdim=True).squeeze(1).unsqueeze(0)
         
         # preparing the input for lstm
         # concat [v_bar, word_emb, h_lang_prev]
-
         input_attn_lstm = torch.cat((v_bar_features, embedded, lang_hidden[0]), dim=-1)
 
+        # h_attn_lstm have the shape of (hidden, cell)
+        # hidden has the shape of (n_layer, batch_size, hidden_size)
+        # hidden has the shape of (n_layer, batch_size, hidden_size)
         attn_output, h_attn_lstm = self.attention_lstm(input_attn_lstm,
                                                        attn_hidden)
+        
+        # get the last hidden layer
+        last_hidden_attn = h_attn_lstm[0] if self.decoder_type=='lstm' else lang_hidden
+        last_hidden_attn = last_hidden_attn.view(self.n_layers, 
+                                                 last_hidden_attn.size(1), 
+                                                 last_hidden_attn.size(2))
+        last_hidden_attn = last_hidden_attn[-1]
 
-        context_global_vector = self.temporal_attention(h_attn_lstm[0], 
-                                                        v_features) 
+        # context global vector
+        # is the product of element-wise multiplication of
+        # attention weight and v_features (batch_size, features_size * 2)
+        context_global_vector = self.temporal_attention(last_hidden_attn, 
+                                                        v_features)
 
         # CHECK NEW
         # motion_feats, motion_weights = self.temporal_attention(last_hidden_lang, motion_feats) #(100, 1536) #(100, 28, 1)
@@ -225,6 +231,7 @@ class DecoderRNN(nn.Module):
         # concat [c_global, c_local, h_attn]
 
         context_global_vector = context_global_vector.unsqueeze(0)
+
         input_lang_lstm = torch.cat((context_global_vector, h_attn_lstm[0]), 
                                     dim=-1)
 

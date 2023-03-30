@@ -78,7 +78,10 @@ class ConfigORGTRL:
     '''
     Hyperparameter settings for Soft Attention based LSTM (SA-LSTM) model.
     '''
-    def __init__(self,model_name='sa-lstm', opt_encoder=True):
+    def __init__(self, 
+                 model_name='sa-lstm', 
+                 opt_encoder=True):
+        
         self.model_name = model_name
         
         #Device configuration

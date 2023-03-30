@@ -320,7 +320,7 @@ class DataHandler:
         ## NUM WORKER GET WARNINGS IN COLLAB USING TPU
         train_loader = DataLoader(train_dset, 
                                   batch_size=self.cfg.batch_size, 
-                                #   num_workers=8, 
+                                  num_workers=8, 
                                   shuffle=True,
                                   collate_fn=collate_fn, 
                                   drop_last=True
@@ -328,14 +328,14 @@ class DataHandler:
 
         val_loader = DataLoader(val_dset, 
                                 batch_size = 10, 
-                                # num_workers=8, 
+                                num_workers=8, 
                                 shuffle = False,
                                 collate_fn = collate_fn,
                                 drop_last=False)
         
         test_loader = DataLoader(test_dset, 
                                  batch_size = 10, 
-                                #  num_workers=8,
+                                 num_workers=8,
                                  shuffle = False,
                                  collate_fn = collate_fn,
                                  drop_last=False)

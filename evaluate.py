@@ -65,7 +65,7 @@ class Evaluator:
                     if self.decoding_type == 'greedy':
                         cap,cap_txt,_ = model.GreedyDecoding(features.to(self.cfg.device))
                     else:
-                        cap_txt = model.BeamDecoding(features.to(self.cfg.device),self.cfg.beam_length)
+                        cap_txt = model.BeamDecoding(features.to(self.cfg.device), self.cfg.beam_length)
                     
                 if self.cfg.model_name == 's2vt':
                     if self.decoding_type == 'greedy':
