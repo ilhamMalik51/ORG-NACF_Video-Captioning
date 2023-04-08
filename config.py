@@ -96,7 +96,7 @@ class ConfigORGTRL:
         self.batch_size = 32 #suitable 
         self.val_batch_size = 10
         self.opt_truncate_caption = True
-        self.max_caption_length = 30
+        self.max_caption_length = 24
         
         
         #Encoder configuration
@@ -128,12 +128,15 @@ class ConfigORGTRL:
         # mean pooled global vide features, previous language lstm hidden state,
         # and previous word embedding
         # this implementation STILL USE CONTEXT GLOBAL AND ATTENTION LSTM HIDDEN STATE
-        self.attention_lstm_input_size = (self.appearance_projected_size * 2) + self.decoder_hidden_size + self.embedding_size
+        # self.attention_lstm_input_size = (self.appearance_projected_size * 2) + self.decoder_hidden_size + self.embedding_size
+        # CEK THE INPUT SIZE
+        self.attention_lstm_input_size = self.appearance_projected_size + self.decoder_hidden_size + self.embedding_size
         
         # this size reflects the concatenation operation of
         # context global, context local, and attentionLSTM hidden state
         # this implementation STILL USE CONTEXT GLOBAL AND ATTENTION LSTM HIDDEN STATE
-        self.language_lstm_input_size = (self.appearance_projected_size * 2) + self.decoder_hidden_size 
+        # CEK THE INPUT SIZE
+        self.language_lstm_input_size = self.appearance_projected_size + self.decoder_hidden_size 
 
         self.n_layers = 1
         self.embed_dropout = 0.5

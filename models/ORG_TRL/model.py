@@ -26,7 +26,6 @@ import copy
      
      
 class Encoder(nn.Module):
-    
     def __init__(self, cfg):
         super(Encoder,self).__init__()
         '''
@@ -37,15 +36,27 @@ class Encoder(nn.Module):
           output_size : Dimention of projected space.
         '''
         
-        self.appearance_projection_layer = nn.Linear(cfg.appearance_input_size, cfg.appearance_projected_size)
-        self.motion_projection_layer = nn.Linear(cfg.motion_input_size, cfg.motion_projected_size)
+        # self.appearance_projection_layer = nn.Linear(cfg.appearance_input_size, cfg.appearance_projected_size)
+        # self.motion_projection_layer = nn.Linear(cfg.motion_input_size, cfg.motion_projected_size)
+
+        self.v_projection_layer = nn.Linear(cfg.appearance_input_size + cfg.motion_input_size, #(batch_size, n_frames, 3600)
+                                            cfg.appearance_projected_size)
+
         
         
-    def forward(self, appearance_feat, motion_feat):
-        appearance_out = self.appearance_projection_layer(appearance_feat)
-        motion_out = self.motion_projection_layer(motion_feat)
+    def forward(self, 
+                appearance_feat, 
+                motion_feat):
+        # appearance_out = self.appearance_projection_layer(appearance_feat)
+        # motion_out = self.motion_projection_layer(motion_feat)
+
+        v_feats = torch.cat([appearance_feat, motion_feat], dim=-1)
+
+        v_feats_out = self.v_projection_layer(v_feats)
+
+        return v_feats_out
         
-        return appearance_out, motion_out
+        # return appearance_out, motion_out
     
 
 class TemporalAttention(nn.Module):
@@ -67,8 +78,8 @@ class TemporalAttention(nn.Module):
         self.features_size = cfg.feat_size
         self.attn_size = cfg.attn_size
         
-        # the input of concatenated features has size of 1024
-        self.encoder_projection = nn.Linear(self.features_size * 2, 
+        # the input of concatenated features has size of 512
+        self.encoder_projection = nn.Linear(self.features_size, 
                                             self.attn_size, 
                                             bias=False)
         
@@ -77,8 +88,8 @@ class TemporalAttention(nn.Module):
                                             bias=False)
         
         self.energy_projection = nn.Linear(self.attn_size, 
-                                            1, 
-                                            bias=False)
+                                           1, 
+                                           bias=False)
      
     def forward(self, 
                 h_attn_lstm, 
@@ -95,10 +106,10 @@ class TemporalAttention(nn.Module):
         Ew = self.energy_projection(torch.tanh(Wv + Uh))
         alpha = F.softmax(Ew, dim=1)
         
-        weighted_feats = alpha.expand_as(v_features) * v_features
+        weighted_feats = torch.mul(alpha, v_features)
         context_global = weighted_feats.sum(dim=1)
 
-        return context_global
+        return context_global, alpha
 
 
 class DecoderRNN(nn.Module):
@@ -203,6 +214,7 @@ class DecoderRNN(nn.Module):
         
         # preparing the input for lstm
         # concat [v_bar, word_emb, h_lang_prev]
+        # (512 + 300 + 512)
         input_attn_lstm = torch.cat((v_bar_features, embedded, lang_hidden[0]), dim=-1)
 
         # h_attn_lstm have the shape of (hidden, cell)
@@ -221,8 +233,8 @@ class DecoderRNN(nn.Module):
         # context global vector
         # is the product of element-wise multiplication of
         # attention weight and v_features (batch_size, features_size * 2)
-        context_global_vector = self.temporal_attention(last_hidden_attn, 
-                                                        v_features)
+        context_global_vector, alpha = self.temporal_attention(last_hidden_attn, 
+                                                               v_features)
 
         # CHECK NEW
         # motion_feats, motion_weights = self.temporal_attention(last_hidden_lang, motion_feats) #(100, 1536) #(100, 28, 1)
@@ -246,7 +258,6 @@ class DecoderRNN(nn.Module):
     
     
 class ORG_TRL(nn.Module):
-    
     def __init__(self, 
                  voc, 
                  cfg, 
@@ -285,7 +296,6 @@ class ORG_TRL(nn.Module):
    
         
     def update_hyperparameters(self,cfg):
-        
         if self.cfg.opt_encoder:
             self.enc_optimizer = optim.Adam(self.encoder.parameters(), lr=cfg.encoder_lr)
         
@@ -390,8 +400,9 @@ class ORG_TRL(nn.Module):
         motion_variable = motion_variable.to(self.device)
         
         if self.cfg.opt_encoder:
-            input_variable, motion_variable = self.encoder(input_variable, 
-                                                           motion_variable)  
+            # input_variable, motion_variable = self.encoder(input_variable, 
+            #                                                motion_variable)
+            v_features = self.encoder(input_variable, motion_variable)    
         
         target_variable = target_variable.to(self.device)
         mask = mask.byte().to(self.device)
@@ -409,7 +420,7 @@ class ORG_TRL(nn.Module):
             decoder_hidden_lang = (decoder_hidden, decoder_hidden)
         
         # concat the input and motion variable
-        v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device) 
+        # v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device) 
 
         # Forward batch of sequences through decoder one time step at a time
         if use_teacher_forcing:
@@ -465,7 +476,11 @@ class ORG_TRL(nn.Module):
     
     
     @torch.no_grad()
-    def GreedyDecoding(self, features, motion_features, max_length=15):
+    def GreedyDecoding(self, 
+                       features, 
+                       motion_features, 
+                       max_length=24):
+        
         batch_size = features.size()[0]
         features = features.to(self.device)
         motion_features = motion_features.to(self.device)
