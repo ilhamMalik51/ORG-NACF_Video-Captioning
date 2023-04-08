@@ -531,7 +531,7 @@ class ORG_TRL(nn.Module):
                      motion_feats, 
                      width, 
                      alpha=0., #This is a diversity parameter
-                     max_caption_len = 30
+                     max_caption_len=24
                      ):
         
         # inisialisasi variable
@@ -546,7 +546,8 @@ class ORG_TRL(nn.Module):
         
         # penggunaan encoder
         if self.cfg.opt_encoder:
-            feats, motion_feats = self.encoder(feats, motion_feats) 
+            # feats, motion_feats = self.encoder(feats, motion_feats)
+            v_features = self.encoder(feats, motion_feats) 
 
         # inisialisasi h_0 atau hidden state awal
         hidden = torch.zeros(self.cfg.n_layers, batch_size, self.cfg.decoder_hidden_size).to(self.device)
@@ -575,7 +576,7 @@ class ORG_TRL(nn.Module):
         output_list = [ [[]] for _ in range(batch_size) ]
 
         # penggabungan fitur
-        v_features = torch.cat((feats, motion_feats), dim=-1)
+        # v_features = torch.cat((feats, motion_feats), dim=-1)
         
         for t in range(max_caption_len + 1):
             
