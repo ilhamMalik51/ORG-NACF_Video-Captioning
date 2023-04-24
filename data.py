@@ -318,17 +318,17 @@ class DataHandler:
                                   )
 
         val_loader = DataLoader(val_dset, 
-                                batch_size = 10, 
+                                batch_size=10, 
                                 num_workers=8, 
-                                shuffle = False,
-                                collate_fn = collate_fn,
+                                shuffle=False,
+                                collate_fn=collate_fn,
                                 drop_last=False)
         
         test_loader = DataLoader(test_dset, 
-                                 batch_size = 10, 
+                                 batch_size=10, 
                                  num_workers=8,
-                                 shuffle = False,
-                                 collate_fn = collate_fn,
+                                 shuffle=False,
+                                 collate_fn=collate_fn,
                                  drop_last=False)
         
         return train_loader, val_loader, test_loader

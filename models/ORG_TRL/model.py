@@ -328,6 +328,8 @@ class DecoderRNN(nn.Module):
         # preparing the input for lstm
         # concat [v_bar, word_emb, h_lang_prev]
         # (512 + 300 + 512)
+        # print(v_bar_features.shape, embedded.shape, lang_hidden[0].shape)
+
         input_attn_lstm = torch.cat((v_bar_features, embedded, lang_hidden[0]), dim=-1)
 
         # h_attn_lstm have the shape of (hidden, cell)
@@ -482,7 +484,7 @@ class ORG_TRL(nn.Module):
          Input:
             dataloader : the dataloader object.basically train dataloader object.
          Return:
-             epoch_loss : Average single time step loss for an epoch
+            epoch_loss : Average single time step loss for an epoch
         '''
         total_loss = 0
         start_iteration = 1
@@ -639,6 +641,161 @@ class ORG_TRL(nn.Module):
         
         return sum(print_losses) / n_totals
     
+    def eval_epoch(self,
+                   dataloader,
+                   utils):
+        '''
+        Function to train the model for a single epoch.
+        Args:
+         Input:
+            dataloader : the dataloader object.basically train dataloader object.
+         Return:
+             epoch_loss : Average single time step loss for an epoch
+        '''
+        total_loss = 0
+        start_iteration = 1
+        print_loss = 0
+        iteration = 1
+
+        # if self.cfg.opt_encoder:
+        #     self.encoder.train()
+        # self.decoder.train()
+
+        for data in dataloader:
+            ## Perlu Merubah Dataloader
+            appearance_features, targets, mask, max_length, _, motion_features, object_features = data
+            use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio else False
+            
+            loss = self.eval_iter(utils, 
+                                  appearance_features,
+                                  motion_features,
+                                  object_features, 
+                                  targets, 
+                                  mask, 
+                                  max_length, 
+                                  use_teacher_forcing)
+            print_loss += loss
+            total_loss += loss
+
+            # Print progress
+            # if iteration % self.print_every == 0:
+            #     print_loss_avg = print_loss / self.print_every
+            #     print("Iteration: {}; Percent complete: {:.1f}%; Average loss: {:.4f}".
+            #     format(iteration, iteration / len(dataloader) * 100, print_loss_avg))
+            #     print_loss = 0
+             
+            # iteration += 1
+
+        return total_loss/len(dataloader)
+        
+    @torch.no_grad()
+    def eval_iter(self, 
+                   utils,
+                   input_variable,
+                   motion_variable,
+                   object_variable,
+                   target_variable,
+                   mask,
+                   max_target_len,
+                   use_teacher_forcing
+                   ):
+        '''
+        Forward propagate input signal and update model for a single iteration. 
+        
+        Args:
+        Inputs:
+            input_variable : video mini-batch tensor; size = (B, T, F)
+            target_variable : Ground Truth Captions;  size = (T, B);
+            T will be different for different mini-batches
+            mask : Masked tensor for Ground Truth;    size = (T, C)
+            max_target_len : maximum lengh of the mini-batch; size = T
+            use_teacher_forcing : binary variable. If True training uses teacher forcing else sampling.
+            clip : clip the gradients to counter exploding gradient problem.
+        Returns:
+            iteration_loss : average loss per time step.
+        '''
+        # if self.cfg.opt_encoder:
+        #     self.enc_optimizer.zero_grad()
+        
+        # self.dec_optimizer.zero_grad()
+        
+        loss = 0
+        print_losses = []
+        n_totals = 0
+        
+        input_variable = input_variable.to(self.device)
+        motion_variable = motion_variable.to(self.device)
+        object_variable = object_variable.to(self.device)
+        
+        if self.cfg.opt_encoder:
+            # input_variable, motion_variable = self.encoder(input_variable, 
+            #                                                motion_variable)
+            v_features, r_obj_feats, r_hat = self.encoder(input_variable, 
+                                                          motion_variable,
+                                                          object_variable)
+
+        aligned_objects = self.objectAlign(r_obj_feats, r_hat)    
+        
+        target_variable = target_variable.to(self.device)
+        mask = mask.byte().to(self.device)
+        
+        # Forward pass through encoder
+        decoder_input = torch.LongTensor([[self.cfg.SOS_token for _ in range(10)]])
+        decoder_input = decoder_input.to(self.device)
+
+        decoder_hidden = torch.zeros(self.cfg.n_layers, 
+                                     10,
+                                     self.cfg.decoder_hidden_size).to(self.device)
+        
+        if self.cfg.decoder_type == 'lstm':
+            decoder_hidden_attn = (decoder_hidden, decoder_hidden)
+            decoder_hidden_lang = (decoder_hidden, decoder_hidden)
+        
+        # concat the input and motion variable
+        # v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device) 
+
+        # Forward batch of sequences through decoder one time step at a time
+        if use_teacher_forcing:
+            for t in range(max_target_len):
+                decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
+                                                                                        decoder_hidden_attn,
+                                                                                        decoder_hidden_lang, 
+                                                                                        v_features, 
+                                                                                        aligned_objects)
+                
+                # Teacher forcing: next input comes from ground truth(data distribution)
+                decoder_input = target_variable[t].view(1, -1)
+                mask_loss, nTotal = utils.maskNLLLoss(decoder_output.unsqueeze(0), 
+                                                      target_variable[t], 
+                                                      mask[t], 
+                                                      self.device)
+                loss += mask_loss
+                print_losses.append(mask_loss.item() * nTotal)
+                n_totals += nTotal
+        else:
+            for t in range(max_target_len):
+                decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
+                                                                                        decoder_hidden_attn,
+                                                                                        decoder_hidden_lang, 
+                                                                                        v_features.float())
+                
+                # No teacher forcing: next input is decoder's own current output(model distribution)
+                _, topi = decoder_output.squeeze(0).topk(1)
+
+                decoder_input = torch.LongTensor([[topi[i][0] for i in range(10)]])
+
+                decoder_input = decoder_input.to(self.device)
+                # Calculate and accumulate loss
+                mask_loss, nTotal = utils.maskNLLLoss(decoder_output, 
+                                                      target_variable[t], 
+                                                      mask[t],
+                                                      self.device)
+                
+                loss += mask_loss
+                print_losses.append(mask_loss.item() * nTotal)
+                n_totals += nTotal
+        
+        return sum(print_losses) / n_totals
 
     @torch.no_grad()
     def GreedyDecoding(self, 
