@@ -92,10 +92,14 @@ class Encoder(nn.Module):
         self.v_projection_layer = nn.Linear(cfg.appearance_input_size + cfg.motion_input_size, #(batch_size, n_frames, 3600)
                                             cfg.appearance_projected_size)
         
-        self.object_projection = nn.Linear(cfg.object_input_size, 
-                                           cfg.object_projected_size)
+        # self.object_projection = nn.Linear(cfg.object_input_size, 
+        #                                    cfg.object_projected_size)
         
-        self.relu_activation = nn.ReLU()
+        self.object_projection = nn.Conv1d(cfg.object_input_size, 
+                                           cfg.object_projected_size, 
+                                           cfg.object_kernel_size)
+        
+        # self.relu_activation = nn.ReLU()
 
         self.org_module = ORG(cfg)  
         
@@ -105,16 +109,19 @@ class Encoder(nn.Module):
                 object_feat):
         # appearance_out = self.appearance_projection_layer(appearance_feat)
         # motion_out = self.motion_projection_layer(motion_feat)
+        batch_size, frame_len, num_objects, _ = object_feat.size()
 
         v_feats = torch.cat([appearance_feat, motion_feat], dim=-1)
-        v_feats_out = self.v_projection_layer(v_feats)
+        v_feats = self.v_projection_layer(v_feats)
+        
+        object_feat = object_feat.view(-1, num_objects, 1024).transpose(1, 2)
+        object_feat = self.object_projection(object_feat)
+        object_feat = object_feat.transpose(1, 2).view(batch_size, frame_len, num_objects, 512)
+        # r_obj_feats = self.relu_activation(object_feat_out)
 
-        object_feat_out = self.object_projection(object_feat)
-        r_obj_feats = self.relu_activation(object_feat_out)
+        r_hat = self.org_module(object_feat)
 
-        r_hat = self.org_module(r_obj_feats)
-
-        return v_feats_out, r_obj_feats, r_hat
+        return v_feats, object_feat, r_hat
         
         # return appearance_out, motion_out
     
