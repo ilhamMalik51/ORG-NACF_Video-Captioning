@@ -23,6 +23,8 @@ import itertools
 import numpy as np
 import os
 import copy
+
+from transformers import BertForMaskedLM
      
      
 class Encoder(nn.Module):
@@ -139,6 +141,8 @@ class DecoderRNN(nn.Module):
             torch.from_numpy(voc.gloVe_embedding).float(),
             freeze=False,
             padding_idx=0)
+        
+        self.embedding_dropout = nn.Dropout(self.dropout)
 
         # CHECK NEW
         # self.embedding = nn.Embedding(voc.num_words, cfg.embedding_size)
@@ -159,7 +163,6 @@ class DecoderRNN(nn.Module):
         
         # CHECK NEW
         self.temporal_attention = TemporalAttention(cfg)
-        self.embedding_dropout = nn.Dropout(cfg.dropout)
 
         self.language_lstm = nn.LSTM(input_size=cfg.language_lstm_input_size, 
                                      hidden_size=cfg.decoder_hidden_size,
@@ -202,7 +205,8 @@ class DecoderRNN(nn.Module):
         '''
 
         embedded = self.embedding(inputs) # [inputs:(1, batch)  outputs:(1, batch, embedding_size)]
-        
+        embedded = self.embedding_dropout(embedded)
+
         # last_hidden_lang = lang_hidden[0] if self.decoder_type=='lstm' else lang_hidden
         # last_hidden_lang = last_hidden_lang.view(self.n_layers, 
         #                                          last_hidden_lang.size(1), 
@@ -241,7 +245,6 @@ class DecoderRNN(nn.Module):
         # context_vector = torch.cat((appearance_feats, motion_feats), dim=1).unsqueeze(0) #(1, B, 512*2)
 
         # concat [c_global, c_local, h_attn]
-
         context_global_vector = context_global_vector.unsqueeze(0)
 
         input_lang_lstm = torch.cat((context_global_vector, h_attn_lstm[0]), 
@@ -250,9 +253,9 @@ class DecoderRNN(nn.Module):
         output, h_lang_lstm = self.language_lstm(input_lang_lstm, 
                                                  lang_hidden) # (1, 100, 512)
         
-        output = output.squeeze(0) # (batch_size, features_From LSTM) (100, 512)
-        output = self.out(output) # (batch_size, vocabulary_size) (100, num_words)
-        output = F.softmax(output, dim = 1) # In Probability Value (batch_size, vocabulary_size) (100, num_words)
+        output = output.squeeze(0) # (batch_size, features_From LSTM) (128, 512)
+        output = self.out(output) # (batch_size, vocabulary_size) (128, num_words)
+        output = F.softmax(output, dim = 1) # In Probability Value (batch_size, vocabulary_size) (128, num_words)
         
         return output, h_attn_lstm, h_lang_lstm
     
@@ -262,7 +265,7 @@ class ORG_TRL(nn.Module):
                  voc, 
                  cfg, 
                  path):
-        super(ORG_TRL,self).__init__()
+        super(ORG_TRL, self).__init__()
 
         self.voc = voc
         self.path = path
@@ -312,10 +315,20 @@ class ORG_TRL(nn.Module):
 
     def save(self, encoder_path, decoder_path):
         if os.path.exists(encoder_path) and os.path.exists(decoder_path):
-            torch.save(self.encoder.state_dict(),encoder_path)
-            torch.save(self.decoder.state_dict(),decoder_path)
+            torch.save(self.encoder.state_dict(), encoder_path)
+            torch.save(self.decoder.state_dict(), decoder_path)
         else:
             print('Invalid path address given.')
+
+    ## NEW TRL TRAINING PARADIGM
+    def set_trl(self, bert_model_path):
+        if os.path.exists(bert_model_path):
+            self.bert_model = BertForMaskedLM.from_pretrained('bert-base-uncased')
+            self.bert_model.load_state_dict(torch.load(bert_model_path))
+
+            self.bert_model.to(self.device)
+        else:
+            print('File not found Error..')
             
     def train_epoch(self,
                     dataloader,
@@ -423,6 +436,11 @@ class ORG_TRL(nn.Module):
         # v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device) 
 
         # Forward batch of sequences through decoder one time step at a time
+        bert_targets = torch.tensor(np.frompyfunc(
+            lambda x: self.voc.index2bert.get(x, 100) if x != 2 else self.voc.index2bert.get(0, 0), 1, 1)(target_variable.T.detach().cpu().numpy()).astype('int32')).long()
+        
+        bert_targets = bert_targets.to(self.device)
+
         if use_teacher_forcing:
             for t in range(max_target_len):
                 decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
@@ -436,7 +454,21 @@ class ORG_TRL(nn.Module):
                                                       target_variable[t], 
                                                       mask[t], 
                                                       self.device)
-                loss += mask_loss
+                
+                bert_input = bert_targets.detach()
+                bert_input[:, t][bert_input[:, t] != 0] = 103
+
+                with torch.no_grad():
+                    bert_output = self.bert_model(bert_input)[0]
+                    bert_output = F.softmax((bert_output / self.cfg.temperature), dim=-1)
+                
+                topk_bert_indices = torch.argsort(bert_output, dim=-1, descending=True)[:, t, :50] # ambil predicted word pada timestep t
+                topk_indices = torch.tensor(np.frompyfunc(
+                    lambda x: self.voc.bert2index.get(x, 3), 1, 1)(topk_bert_indices.detach().cpu().numpy()).astype('int32')).long()
+                
+                kl_loss = utils.KLLoss(decoder_output, bert_output, topk_indices, topk_bert_indices, t)
+
+                loss += (((1 - self.cfg.lambda_var) * mask_loss) + (self.cfg.lambda_var * kl_loss))
                 print_losses.append(mask_loss.item() * nTotal)
                 n_totals += nTotal
         else:
@@ -522,7 +554,7 @@ class ORG_TRL(nn.Module):
 
         return total_loss/len(dataloader)
     
-    
+
     @torch.no_grad()
     def eval_iter(self, 
                    utils,

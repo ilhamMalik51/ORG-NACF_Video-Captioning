@@ -158,6 +158,10 @@ class ConfigORGTRL:
         self.weight_decay = 1e-5
         self.reg_lambda = 0.
 
+        # TRL config
+        self.temperature = 3 # refers to the best model hyperparams
+        self.lambda_var = 0.3 # refers to the best model hyperparams
+
         #Vocabulary configuration
         self.SOS_token = 1
         self.EOS_token = 2

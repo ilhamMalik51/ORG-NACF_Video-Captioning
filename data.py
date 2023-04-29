@@ -79,7 +79,7 @@ class CustomDataset(Dataset):
     def __len__(self):
         return len(self.v_name_list)
     
-    def __getitem__(self,idx): 
+    def __getitem__(self, idx): 
         anno = random.choice(self.annotation_dict[self.v_name_list[idx]])
         anno_index = []
         for word in anno.split(' '):
@@ -99,7 +99,7 @@ class CustomDataset(Dataset):
         if self.motion_feature_dict == None:
             motion_tensor = torch.zeros_like(appearance_tensor)
         else:
-             motion_tensor = torch.tensor(self.motion_feature_dict[self.v_name_list[idx]]).float()
+            motion_tensor = torch.tensor(self.motion_feature_dict[self.v_name_list[idx]]).float()
         
         if self.object_feature_dict == None:
             object_tensor = torch.zeros_like(appearance_tensor)
@@ -261,7 +261,6 @@ class DataHandler:
         return train_dict, val_dict, test_dict
     
     def getDatasets(self):
-        
         if self.cfg.model_name =='marn' or self.cfg.model_name == 'sa-lstm':
             # train_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.train_dict, self.train_name_list, self.voc,
             #                           self.motion_feature_dict, self.object_feature_dict)
@@ -294,24 +293,24 @@ class DataHandler:
                                       self.voc,
                                       self.motion_feature_dict)
             
-        if self.cfg.model_name == 'mean_pooling' or self.cfg.model_name == 'recnet':
-            train_dset = CustomDataset(self.cfg,
-                                       self.appearance_feature_dict, 
-                                       self.train_dict, 
-                                       self.train_name_list, 
-                                       self.voc)
+        # if self.cfg.model_name == 'mean_pooling' or self.cfg.model_name == 'recnet':
+        #     train_dset = CustomDataset(self.cfg,
+        #                                self.appearance_feature_dict, 
+        #                                self.train_dict, 
+        #                                self.train_name_list, 
+        #                                self.voc)
             
-            val_dset = CustomDataset(self.cfg,
-                                     self.appearance_feature_dict, 
-                                     self.val_dict, 
-                                     self.val_name_list, 
-                                     self.voc)
+        #     val_dset = CustomDataset(self.cfg,
+        #                              self.appearance_feature_dict, 
+        #                              self.val_dict, 
+        #                              self.val_name_list, 
+        #                              self.voc)
             
-            test_dset = CustomDataset(self.cfg,
-                                      self.appearance_feature_dict, 
-                                      self.test_dict, 
-                                      self.test_name_list, 
-                                      self.voc)
+        #     test_dset = CustomDataset(self.cfg,
+        #                               self.appearance_feature_dict, 
+        #                               self.test_dict, 
+        #                               self.test_name_list, 
+        #                               self.voc)
             
             
         return train_dset, val_dset, test_dset
