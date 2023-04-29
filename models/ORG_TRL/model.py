@@ -306,7 +306,7 @@ class ORG_TRL(nn.Module):
         self.teacher_forcing_ratio = cfg.teacher_forcing_ratio
         
         
-    def load(self, encoder_path = 'Save/ORG_Encoder_10.pt', decoder_path='Saved/ORG_Decoder_10.pt'):
+    def load(self, encoder_path = 'Save/ORG_Encoder_10.pt', decoder_path = 'Saved/ORG_Decoder_10.pt'):
         if os.path.exists(encoder_path) and os.path.exists(decoder_path):
             self.encoder.load_state_dict(torch.load(encoder_path))
             self.decoder.load_state_dict(torch.load(decoder_path))
@@ -321,17 +321,26 @@ class ORG_TRL(nn.Module):
             print('Invalid path address given.')
 
     ## NEW TRL TRAINING PARADIGM
-    def set_trl(self, bert_model_path='bert_finetuned_1000_data_fix.pt'):
+    def set_trl(self, 
+                bert_model_path='bert_finetuned_1000_data_fix.pt',
+                index2bert_path='index2bert_ts.pt'):
 
         bert_pth = os.path.join('Saved', bert_model_path)
+        i2b = os.path.join('Saved', index2bert_path)
 
         if os.path.exists(bert_pth):
             self.bert_model = BertForMaskedLM.from_pretrained('bert-base-uncased')
-            self.bert_model.load_state_dict(torch.load(bert_pth))
 
-            self.bert_model.to(self.device)
+            if self.device == 'cpu':
+                self.bert_model.load_state_dict(torch.load(bert_pth, map_location=torch.device('cpu')))
+            else:
+                self.bert_model.load_state_dict(torch.load(bert_pth))
 
-            print('Fine-tuned Bert Model Loaded Successfully')
+            self.bert_model = self.bert_model.to(self.device)
+            self.index2bert = torch.load(i2b).to(self.device)
+            self.index2bert = self.index2bert.requires_grad_(False)
+
+            print('Fine-tuned Bert Model and Index2Bert Tensor Loaded Successfully')
         else:
             print('File not found Error..')
             
@@ -441,9 +450,7 @@ class ORG_TRL(nn.Module):
         # v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device) 
 
         # Forward batch of sequences through decoder one time step at a time
-        bert_targets = torch.tensor(np.frompyfunc(
-            lambda x: self.voc.index2bert.get(x, 100) if x != 2 else self.voc.index2bert.get(0, 0), 1, 1)(target_variable.T.detach().cpu().numpy()).astype('int32')).long()
-        
+        bert_targets = self.index2bert[target_variable.T].detach()
         bert_targets = bert_targets.to(self.device)
 
         if use_teacher_forcing:
@@ -467,11 +474,20 @@ class ORG_TRL(nn.Module):
                     bert_output = self.bert_model(bert_input)[0]
                     bert_output = F.softmax((bert_output / self.cfg.temperature), dim=-1)
                 
-                topk_bert_indices = torch.argsort(bert_output, dim=-1, descending=True)[:, t, :50] # ambil predicted word pada timestep t
-                topk_indices = torch.tensor(np.frompyfunc(
-                    lambda x: self.voc.bert2index.get(x, 3), 1, 1)(topk_bert_indices.detach().cpu().numpy()).astype('int32')).long()
+                 # ambil predicted word pada timestep t
+                topk_bert_indices = torch.argsort(bert_output.detach(), dim=-1, descending=True)[:, t, :50]
+                topk_indices = torch.full_like(topk_bert_indices, 3)
                 
-                kl_loss = utils.KLLoss(decoder_output, bert_output, topk_indices, topk_bert_indices, t)
+                output_tuple = (torch.eq(self.index2bert.view(1, -1), topk_bert_indices.unsqueeze(-1))).nonzero(as_tuple=True)
+                topk_indices[output_tuple[0], output_tuple[1]] = output_tuple[2]
+                
+                mask = torch.ones_like(topk_indices)
+                mask[(topk_indices.eq(3) | topk_indices.eq(0))] = 0 # 3 adalah Unknown Token dan 0 adalah Padding Token
+
+                kl_loss = utils.KLLoss(torch.gather(decoder_output, 1, topk_indices), 
+                                       torch.gather(bert_output[:, t], 1, topk_bert_indices),
+                                       mask, 
+                                       t)
 
                 loss += (((1 - self.cfg.lambda_var) * mask_loss) + (self.cfg.lambda_var * kl_loss))
                 print_losses.append(mask_loss.item() * nTotal)
@@ -534,13 +550,12 @@ class ORG_TRL(nn.Module):
 
         for data in dataloader:
             ## Perlu Merubah Dataloader
-            appearance_features, targets, mask, max_length, _, motion_features, object_features = data
+            appearance_features, targets, mask, max_length, _, motion_features, _ = data
             use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio else False
             
             loss = self.eval_iter(utils, 
                                   appearance_features,
-                                  motion_features,
-                                  object_features, 
+                                  motion_features, 
                                   targets, 
                                   mask, 
                                   max_length, 
@@ -562,14 +577,13 @@ class ORG_TRL(nn.Module):
 
     @torch.no_grad()
     def eval_iter(self, 
-                   utils,
-                   input_variable,
-                   motion_variable,
-                   object_variable,
-                   target_variable,
-                   mask,
-                   max_target_len,
-                   use_teacher_forcing
+                  utils,
+                  input_variable,
+                  motion_variable,
+                  target_variable,
+                  mask,
+                  max_target_len,
+                  use_teacher_forcing
                    ):
         '''
         Forward propagate input signal and update model for a single iteration. 
@@ -585,28 +599,21 @@ class ORG_TRL(nn.Module):
             clip : clip the gradients to counter exploding gradient problem.
         Returns:
             iteration_loss : average loss per time step.
-        '''
-        # if self.cfg.opt_encoder:
-        #     self.enc_optimizer.zero_grad()
-        
-        # self.dec_optimizer.zero_grad()
-        
+        '''        
         loss = 0
         print_losses = []
         n_totals = 0
         
         input_variable = input_variable.to(self.device)
         motion_variable = motion_variable.to(self.device)
-        object_variable = object_variable.to(self.device)
         
         if self.cfg.opt_encoder:
             # input_variable, motion_variable = self.encoder(input_variable, 
             #                                                motion_variable)
-            v_features, r_obj_feats, r_hat = self.encoder(input_variable, 
-                                                          motion_variable,
-                                                          object_variable)
+            v_features = self.encoder(input_variable, 
+                                                          motion_variable)
 
-        aligned_objects = self.objectAlign(r_obj_feats, r_hat)    
+        # aligned_objects = self.objectAlign(r_obj_feats, r_hat)    
         
         target_variable = target_variable.to(self.device)
         mask = mask.byte().to(self.device)
@@ -632,8 +639,7 @@ class ORG_TRL(nn.Module):
                 decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
                                                                                         decoder_hidden_attn,
                                                                                         decoder_hidden_lang, 
-                                                                                        v_features, 
-                                                                                        aligned_objects)
+                                                                                        v_features)
                 
                 # Teacher forcing: next input comes from ground truth(data distribution)
                 decoder_input = target_variable[t].view(1, -1)

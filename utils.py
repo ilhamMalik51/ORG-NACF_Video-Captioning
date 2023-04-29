@@ -82,18 +82,15 @@ class Utils:
         return loss, nTotal.item()
     
     @staticmethod
-    def KLLoss(decoder_output, bert_output, topk_indices, topk_bert_indices, t):
+    def KLLoss(proba_p, proba_q, mask, t):
         '''
         Simplified Kullback-Leibler divergence loss
         refers: https://openaccess.thecvf.com/content_CVPR_2020/papers/Zhang_Object_Relational_Graph_With_Teacher-Recommended_Learning_for_Video_Captioning_CVPR_2020_paper.pdf
         '''
-        mask = torch.ones_like(topk_indices)
-        mask[(topk_indices.eq(3) | topk_indices.eq(0))] = 0 # 3 adalah Unknown Token dan 0 adalah Padding Token
-
-        log_loss_p = torch.log(torch.gather(decoder_output, 1, topk_indices)) # perlu dikali mask karena unknown token tidak dihitung untuk loss
+        log_loss_p = torch.log(proba_p) # perlu dikali mask karena unknown token tidak dihitung untuk loss
         log_loss_p = log_loss_p * mask
-        proba_q = torch.gather(bert_output[:, t], 1, topk_bert_indices)
         kl_loss = (-(proba_q * log_loss_p).sum(dim=-1)).mean()
+        
         return kl_loss
  
     @staticmethod
