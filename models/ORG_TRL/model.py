@@ -472,7 +472,7 @@ class ORG_TRL(nn.Module):
 
                 with torch.no_grad():
                     bert_output = self.bert_model(bert_input)[0]
-                    bert_output = F.softmax((bert_output / self.cfg.temperature), dim=-1)
+                    bert_output = torch.exp(F.log_softmax((bert_output / self.cfg.temperature), dim=-1))
                 
                  # ambil predicted word pada timestep t
                 topk_bert_indices = torch.argsort(bert_output.detach(), dim=-1, descending=True)[:, t, :50]
@@ -481,12 +481,12 @@ class ORG_TRL(nn.Module):
                 output_tuple = (torch.eq(self.index2bert.view(1, -1), topk_bert_indices.unsqueeze(-1))).nonzero(as_tuple=True)
                 topk_indices[output_tuple[0], output_tuple[1]] = output_tuple[2]
                 
-                mask = torch.ones_like(topk_indices)
-                mask[(topk_indices.eq(3) | topk_indices.eq(0))] = 0 # 3 adalah Unknown Token dan 0 adalah Padding Token
+                mask_p = torch.ones_like(topk_indices)
+                mask_p[(topk_indices.eq(3) | topk_indices.eq(0))] = 0 # 3 adalah Unknown Token dan 0 adalah Padding Token
 
                 kl_loss = utils.KLLoss(torch.gather(decoder_output, 1, topk_indices), 
                                        torch.gather(bert_output[:, t], 1, topk_bert_indices),
-                                       mask, 
+                                       mask_p, 
                                        t)
 
                 loss += (((1 - self.cfg.lambda_var) * mask_loss) + (self.cfg.lambda_var * kl_loss))
