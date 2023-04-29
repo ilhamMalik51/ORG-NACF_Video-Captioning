@@ -67,8 +67,8 @@ class Vocabulary:
              word2index_dic = 'word2index_dic.p', 
              index2word_dic = 'index2word_dic.p',
              word2count_dic = 'word2count_dic.p',
-             index2bert_dic = 'bert2index_dic.p',
-             bert2index_dic = 'index2bert_dic.p',
+             index2bert_dic = 'index2bert_dic.p',
+             bert2index_dic = 'bert2index_dic.p',
              ):
 
         w2i = os.path.join('Saved', self.name + '_' + word2index_dic)
@@ -96,6 +96,7 @@ class Vocabulary:
 
             self.num_words = len(self.word2index)
 
+            print('All files loaded succesfully!')
         except:
             print('File loading error.. check the path or filename is correct')
 

@@ -321,12 +321,17 @@ class ORG_TRL(nn.Module):
             print('Invalid path address given.')
 
     ## NEW TRL TRAINING PARADIGM
-    def set_trl(self, bert_model_path):
-        if os.path.exists(bert_model_path):
+    def set_trl(self, bert_model_path='bert_finetuned_1000_data_fix.pt'):
+
+        bert_pth = os.path.join('Saved', bert_model_path)
+
+        if os.path.exists(bert_pth):
             self.bert_model = BertForMaskedLM.from_pretrained('bert-base-uncased')
-            self.bert_model.load_state_dict(torch.load(bert_model_path))
+            self.bert_model.load_state_dict(torch.load(bert_pth))
 
             self.bert_model.to(self.device)
+
+            print('Fine-tuned Bert Model Loaded Successfully')
         else:
             print('File not found Error..')
             
