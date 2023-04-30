@@ -290,6 +290,8 @@ class ORG_TRL(nn.Module):
         if cfg.opt_param_init:
             self.init_params()
         
+    def index_from_bert(self, x):
+        return self.cfg.bert2index.get(x)
         
     def init_params(self):
         for name, param in self.decoder.named_parameters():
@@ -335,6 +337,7 @@ class ORG_TRL(nn.Module):
                 self.bert_model.load_state_dict(torch.load(bert_pth, map_location=torch.device('cpu')))
             else:
                 self.bert_model.load_state_dict(torch.load(bert_pth))
+                print('Bert Model Loaded to GPU')
 
             self.bert_model = self.bert_model.to(self.device)
             self.index2bert = torch.load(i2b).to(self.device)
@@ -450,9 +453,6 @@ class ORG_TRL(nn.Module):
         # v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device) 
 
         # Forward batch of sequences through decoder one time step at a time
-        bert_targets = self.index2bert[target_variable.T].detach()
-        bert_targets = bert_targets.to(self.device)
-
         if use_teacher_forcing:
             for t in range(max_target_len):
                 decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
@@ -467,25 +467,23 @@ class ORG_TRL(nn.Module):
                                                       mask[t], 
                                                       self.device)
                 
-                bert_input = bert_targets.detach()
+                # Preparing input for bert token IDs
+                bert_input = self.index2bert[target_variable.T].detach()
                 bert_input[:, t][bert_input[:, t] != 0] = 103
 
                 with torch.no_grad():
                     bert_output = self.bert_model(bert_input)[0]
-                    bert_output = torch.exp(F.log_softmax((bert_output / self.cfg.temperature), dim=-1))
+                    bert_output = F.softmax((bert_output / self.cfg.temperature), dim=-1)
                 
-                 # ambil predicted word pada timestep t
-                topk_bert_indices = torch.argsort(bert_output.detach(), dim=-1, descending=True)[:, t, :50]
-                topk_indices = torch.full_like(topk_bert_indices, 3)
-                
-                output_tuple = (torch.eq(self.index2bert.view(1, -1), topk_bert_indices.unsqueeze(-1))).nonzero(as_tuple=True)
-                topk_indices[output_tuple[0], output_tuple[1]] = output_tuple[2]
+                # ambil predicted word pada timestep t
+                topk_bert_probs, topk_indices = torch.topk(bert_output[:, t, :], k=50, dim=-1)
+                topk_indices.apply_(self.index_from_bert) 
                 
                 mask_p = torch.ones_like(topk_indices)
                 mask_p[(topk_indices.eq(3) | topk_indices.eq(0))] = 0 # 3 adalah Unknown Token dan 0 adalah Padding Token
 
                 kl_loss = utils.KLLoss(torch.gather(decoder_output, 1, topk_indices), 
-                                       torch.gather(bert_output[:, t], 1, topk_bert_indices),
+                                       topk_bert_probs,
                                        mask_p, 
                                        t)
 
