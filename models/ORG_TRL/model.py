@@ -37,40 +37,40 @@ class ORG(nn.Module):
                         the last fully-connected layer of the backbone
                         of Faster R-CNN
         '''
-
-
-        self.sigma_r = nn.Linear(cfg.object_projected_size, 
-                                 cfg.object_projected_size)
+        self.sigma_r = nn.Conv2d(in_channels=cfg.object_projected_size, 
+                                 out_channels=cfg.object_projected_size,
+                                 kernel_size=cfg.object_kernel_size)
         
-        self.psi_r = nn.Linear(cfg.object_projected_size, 
-                               cfg.object_projected_size)
+        self.psi_r = nn.Conv2d(in_channels=cfg.object_projected_size, 
+                                 out_channels=cfg.object_projected_size,
+                                 kernel_size=cfg.object_kernel_size)
         
-        self.a_softmax = nn.Softmax(dim=1)
-        
-        self.w_r = nn.Linear(cfg.object_projected_size, 
-                             cfg.object_projected_size, 
+        self.w_r = nn.Conv2d(in_channels=cfg.object_projected_size, 
+                             out_channels=cfg.object_projected_size,
+                             kernel_size=cfg.object_kernel_size,
                              bias=False)
     
-    def forward(self, 
-                r_obj_feats):
+    def forward(self, r_feats):
+        '''
+        input:
+          r_feats: The embedded feature into 512-D which has shape of
+                   (batch_size, feature_dim, num_frames, num_objects)
+        output:
+          r_hat: Enhanced features that has the information of relation
+                 between objects 
+                 (batch_size, num_frames, num_objects, feature_dim)
+        '''
+        ## Sigma(R) = R . Wi + bi
+        ## Psi(R) = R . Wj + bj
+        ## A = Simga(R) . Psi(R).T
+        a_coeff = torch.matmul(self.sigma_r(r_feats).permute(0, 2, 3, 1), 
+                               self.psi_r(r_feats).permute(0, 2, 1, 3))
         
-        r_hat_ith_frame = []
-        # for loop on every frame
-        for i in range(r_obj_feats.size(1)):
-            sigma_r_out = self.sigma_r(r_obj_feats[:, i])
-            psi_r_out = self.psi_r(r_obj_feats[:, i])
+        ## A_hat = Softmax(A)
+        a_hat = F.softmax(a_coeff, dim=-1)
 
-            # batch multiplications
-            a_coeff_mat = torch.bmm(sigma_r_out, psi_r_out.transpose(1, 2))
-            a_hat = self.a_softmax(a_coeff_mat)
-            
-            # batch multiplication
-            a_hat_mul_r = torch.bmm(a_hat, r_obj_feats[:, i])
-            output = self.w_r(a_hat_mul_r)
-            
-            r_hat_ith_frame.append(output.unsqueeze(1))
-        
-        r_hat = torch.cat(r_hat_ith_frame, dim=1)
+        ## R_hat = A_hat . R . Wr
+        r_hat = torch.matmul(a_hat, self.w_r(r_feats).permute(0, 2, 3, 1))
         
         return r_hat
 
@@ -85,45 +85,29 @@ class Encoder(nn.Module):
           input_size : CNN extracted feature size. For ResNet 2048, For inceptionv4 1536
           output_size : Dimention of projected space.
         '''
-        
-        # self.appearance_projection_layer = nn.Linear(cfg.appearance_input_size, cfg.appearance_projected_size)
-        # self.motion_projection_layer = nn.Linear(cfg.motion_input_size, cfg.motion_projected_size)
-
         self.v_projection_layer = nn.Linear(cfg.appearance_input_size + cfg.motion_input_size, #(batch_size, n_frames, 3600)
                                             cfg.appearance_projected_size)
         
-        # self.object_projection = nn.Linear(cfg.object_input_size, 
-        #                                    cfg.object_projected_size)
-        
-        self.object_projection = nn.Conv1d(cfg.object_input_size, 
+        self.object_projection = nn.Conv2d(cfg.object_input_size, 
                                            cfg.object_projected_size, 
                                            cfg.object_kernel_size)
-        
-        # self.relu_activation = nn.ReLU()
 
         self.org_module = ORG(cfg)  
         
-    def forward(self, 
-                appearance_feat, 
-                motion_feat, 
-                object_feat):
-        # appearance_out = self.appearance_projection_layer(appearance_feat)
-        # motion_out = self.motion_projection_layer(motion_feat)
-        batch_size, frame_len, num_objects, _ = object_feat.size()
-
+    def forward(self, appearance_feat, motion_feat, object_feat):
         v_feats = torch.cat([appearance_feat, motion_feat], dim=-1)
         v_feats = self.v_projection_layer(v_feats)
         
-        object_feat = object_feat.view(-1, num_objects, 1024).transpose(1, 2)
-        object_feat = self.object_projection(object_feat)
-        object_feat = object_feat.transpose(1, 2).view(batch_size, frame_len, num_objects, 512)
-        # r_obj_feats = self.relu_activation(object_feat_out)
-
-        r_hat = self.org_module(object_feat)
-
-        return v_feats, object_feat, r_hat
+        ## Intinya memproyeksikan dengan input
+        ## yang direshape langsung menjadi (batch_size * num_objects, dim_feature, frame_len)
+        ## Intinya memproyeksikan dengan input
+        ## yang direshape langsung menjadi (batch_size * num_objects, dim_feature, frame_len)
+        r_feats = F.relu(self.object_projection(object_feat.permute(0, 3, 1, 2)))
         
-        # return appearance_out, motion_out
+        ## r_feats (batch_size, dim_feature, height, width)
+        r_hat = self.org_module(r_feats)
+
+        return v_feats, r_hat
     
 
 class TemporalAttention(nn.Module):
@@ -158,9 +142,7 @@ class TemporalAttention(nn.Module):
                                            1, 
                                            bias=False)
      
-    def forward(self, 
-                h_attn_lstm, 
-                v_features):
+    def forward(self, h_attn_lstm, v_features):
         '''
         shape of hidden attention lstm (batch_size, hidden_size)
         shape of video features input (batch_size, n_frames, features_size)
@@ -170,11 +152,8 @@ class TemporalAttention(nn.Module):
         Uh = self.decoder_projection(h_attn_lstm)
         Uh = Uh.unsqueeze(1).expand_as(Wv)
 
-        Ew = self.energy_projection(torch.tanh(Wv + Uh))
-        alpha = F.softmax(Ew, dim=1)
-        
-        weighted_feats = torch.mul(alpha, v_features)
-        context_global = weighted_feats.sum(dim=1)
+        alpha = F.softmax(self.energy_projection(torch.tanh(Wv + Uh)),  dim=1)
+        context_global = torch.sum(torch.mul(alpha, v_features), dim=1)
 
         return context_global, alpha
 
@@ -207,23 +186,19 @@ class SpatialAttention(nn.Module):
      
     def forward(self, h_attn_lstm, obj_feats):
         '''
-        shape of hidden (hidden_size) (batch,hidden_size) #(100, 512)
-        shape of feats (batch size, ,feat_size)  #(100, 40, 1536)
+        shape of hidden (hidden_size) (batch,hidden_size) #(128, 512)
+        shape of obj_feats (batch size, num_objects, feat_size)  #(128, 5, 512)
         '''
         Wv = self.encoder_projection(obj_feats)
         Uh = self.decoder_projection(h_attn_lstm)
         Uh = Uh.unsqueeze(1).expand_as(Wv)
 
-        Ew = self.energy_projection(torch.tanh(Wv + Uh))
-        beta = F.softmax(Ew, dim=1)
-        
-        weighted_objs = torch.mul(obj_feats, beta)
-        global_context_feature = torch.sum(weighted_objs, dim=1)
+        beta = F.softmax(self.energy_projection(torch.tanh(Wv + Uh)), dim=1)        
+        global_context_feature = torch.sum(torch.mul(obj_feats, beta), dim=1)
 
-        return global_context_feature, beta
+        return global_context_feature
 
 class DecoderRNN(nn.Module):
-    
     def __init__(self, cfg, voc):
         super(DecoderRNN, self).__init__()
         '''
@@ -277,13 +252,6 @@ class DecoderRNN(nn.Module):
                                      hidden_size=cfg.decoder_hidden_size,
                                      num_layers=self.n_layers, 
                                      dropout=self.rnn_dropout)
-
-        # if self.decoder_type == 'gru':
-        #     self.rnn = nn.GRU(input_size=cfg.decoder_input_size, hidden_size=cfg.decoder_hidden_size,
-        #                       num_layers=self.n_layers, dropout=self.rnn_dropout)
-        # else:
-        #     self.rnn = nn.LSTM(input_size=cfg.decoder_input_size, hidden_size=cfg.decoder_hidden_size,
-        #                    num_layers=self.n_layers, dropout=self.rnn_dropout)
             
         self.out = nn.Linear(cfg.decoder_hidden_size, self.output_size)
 
@@ -315,31 +283,20 @@ class DecoderRNN(nn.Module):
         '''
 
         embedded = self.embedding(inputs) # [inputs:(1, batch)  outputs:(1, batch, embedding_size)]
-        
-        # last_hidden_lang = lang_hidden[0] if self.decoder_type=='lstm' else lang_hidden
-        # last_hidden_lang = last_hidden_lang.view(self.n_layers, 
-        #                                          last_hidden_lang.size(1), 
-        #                                          last_hidden_lang.size(2))
-        # last_hidden_lang = last_hidden_lang[-1]
 
         # global mean pooled the v features
         v_bar_features = torch.mean(v_features, dim=1, keepdim=True).squeeze(1).unsqueeze(0)
         
         # preparing the input for lstm
-        # concat [v_bar, word_emb, h_lang_prev]
-        # (512 + 300 + 512)
-        # print(v_bar_features.shape, embedded.shape, lang_hidden[0].shape)
-
+        # concat [v_bar, word_emb, h_lang_prev] shape(512 + 300 + 512)
         input_attn_lstm = torch.cat((v_bar_features, embedded, lang_hidden[0]), dim=-1)
 
         # h_attn_lstm have the shape of (hidden, cell)
         # hidden has the shape of (n_layer, batch_size, hidden_size)
-        # hidden has the shape of (n_layer, batch_size, hidden_size)
-        attn_output, h_attn_lstm = self.attention_lstm(input_attn_lstm,
-                                                       attn_hidden)
+        _, h_attn_lstm = self.attention_lstm(input_attn_lstm, attn_hidden)
         
         # get the last hidden layer
-        last_hidden_attn = h_attn_lstm[0] if self.decoder_type=='lstm' else lang_hidden
+        last_hidden_attn = h_attn_lstm[0] if self.decoder_type=='lstm' else h_attn_lstm
         last_hidden_attn = last_hidden_attn.view(self.n_layers, 
                                                  last_hidden_attn.size(1), 
                                                  last_hidden_attn.size(2))
@@ -348,30 +305,19 @@ class DecoderRNN(nn.Module):
         # context global vector
         # is the product of element-wise multiplication of
         # attention weight and v_features (batch_size, features_size * 2)
-        context_global_vector, alpha = self.temporal_attention(last_hidden_attn, 
-                                                               v_features)
+        context_global_vector, alpha = self.temporal_attention(last_hidden_attn, v_features)
         
-        weighted_frames = torch.mul(aligned_objects, alpha.unsqueeze(-1))
-        local_aligned_features = torch.sum(weighted_frames, dim=1)
+        local_aligned_features = torch.sum(torch.mul(aligned_objects, alpha.unsqueeze(-1)), dim=1)
 
-        context_local_vector, beta = self.spatial_attention(last_hidden_attn, 
-                                                            local_aligned_features)
+        # input local_aligned_features into the spatial attention
+        context_local_vector = self.spatial_attention(last_hidden_attn, local_aligned_features)
 
-        # CHECK NEW
-        # motion_feats, motion_weights = self.temporal_attention(last_hidden_lang, motion_feats) #(100, 1536) #(100, 28, 1)
-        # context_vector = torch.cat((appearance_feats, motion_feats), dim=1).unsqueeze(0) #(1, B, 512*3)
+        # concat [c_global, c_local, h_attn] (3, 128, 512) (L, N, dim_feature)
+        input_lang_lstm = torch.cat((context_global_vector.unsqueeze(0), 
+                                     context_local_vector.unsqueeze(0), 
+                                     h_attn_lstm[0]), dim=-1)
 
-        # concat [c_global, c_local, h_attn]
-
-        context_global_vector = context_global_vector.unsqueeze(0)
-        context_local_vector = context_local_vector.unsqueeze(0)
-        
-
-        input_lang_lstm = torch.cat((context_global_vector, context_local_vector, h_attn_lstm[0]), 
-                                    dim=-1)
-
-        output, h_lang_lstm = self.language_lstm(input_lang_lstm, 
-                                                 lang_hidden) # (1, 100, 512)
+        output, h_lang_lstm = self.language_lstm(input_lang_lstm, lang_hidden) # (1, 100, 512)
         
         output = output.squeeze(0) # (batch_size, features_From LSTM) (100, 512)
         output = self.out(output) # (batch_size, vocabulary_size) (100, num_words)
@@ -440,40 +386,32 @@ class ORG_TRL(nn.Module):
         else:
             print('Invalid path address given.')
     
-    def objectAlign(self, 
-                    r_obj_feats, 
-                    r_hat
-                    ):
+    def align_object_variable(self, object_variable, r_hat):
+        '''
+        align object modul according to ORG-TRL Paper
+        refers = https://openaccess.thecvf.com/content_CVPR_2020/papers/Zhang_Object_Relational_Graph_With_Teacher-Recommended_Learning_for_Video_Captioning_CVPR_2020_paper.pdf
+        args:
+        object_variable : This is object features exctracted from Faster RCNN
+        output:
+        aligned_object_variable
+        '''
+        ## Mengambil anchor frame sebagai acuan untuk setiap objek
+        ## Memisahkan anchor frame dari keseluruhan fitur objek
+        anchor_frame = object_variable[:, 0]
+        next_frame = object_variable[:, 1:object_variable.size(3)]
         
-        batch_size, max_num_frames, max_num_objects, object_feature_dim = r_obj_feats.size()
+        ## menghitung cosine similarity scores
+        ## matmul( achor_frame, next_frame ) / | anchor_frame | * | next_frame |
+        similarity_score = (torch.matmul(anchor_frame.unsqueeze(1), next_frame.transpose(2, -1)) / \
+                            (torch.norm(anchor_frame.unsqueeze(1), dim=-1)[:, :, :, None] * \
+                            torch.norm(next_frame, dim=-1)[:, :, None, :]))
 
-        # Compute the similarity scores between each pair of frames
-        aligned_objects = []
-        anchor_frame = r_obj_feats[:, 0]
-        anchor_r_hat = r_hat[:, 0]
+        aligned_frames = torch.gather(r_hat[:, 1:r_hat.size(3)], 
+                                      dim=2, 
+                                      index=similarity_score.topk(1, -1)[1].\
+                                      expand(-1, -1, -1, r_hat.size(-1)))
 
-        for i in range(1, max_num_frames):
-            # ini menggunakan projected R_features_biasa
-            i_th_frame = r_obj_feats[:, i] 
-            i_th_target_frame = r_hat[:, i]
-
-            # Compute the cosine similarity between each object in the anchor frame and the i-th frame.
-            # Using R_features
-            similarity_scores_i = torch.bmm(anchor_frame, i_th_frame.transpose(1, 2)) / \
-                                 (torch.norm(anchor_frame, dim=2)[:, :, None] * torch.norm(i_th_frame, dim=2)[:, None, :])
-            
-            max_similarities, max_similarity_indices = torch.max(similarity_scores_i, dim=2)
-            
-            aligned_objects_i = torch.gather(i_th_target_frame, 
-                                             dim=1, 
-                                             index=max_similarity_indices[:, :, None].expand(-1, -1, object_feature_dim))
-            
-            aligned_objects.append(aligned_objects_i.unsqueeze(1))
-
-        aligned_frames = torch.cat(aligned_objects, dim=1)
-        all_aligned_frames = torch.cat([anchor_r_hat.unsqueeze(1), aligned_frames], dim=1)
-
-        return all_aligned_frames
+        return torch.cat([r_hat[:, 0].unsqueeze(1), aligned_frames], dim=1)
             
     def train_epoch(self,
                     dataloader,
@@ -500,6 +438,8 @@ class ORG_TRL(nn.Module):
             appearance_features, targets, mask, max_length, _, motion_features, object_features = data
             use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio else False
             
+            ## Di sini dicari index untuk aligned objects
+
             loss = self.train_iter(utils, 
                                    appearance_features,
                                    motion_features,
@@ -550,7 +490,6 @@ class ORG_TRL(nn.Module):
         '''
         if self.cfg.opt_encoder:
             self.enc_optimizer.zero_grad()
-        
         self.dec_optimizer.zero_grad()
         
         loss = 0
@@ -560,18 +499,15 @@ class ORG_TRL(nn.Module):
         input_variable = input_variable.to(self.device)
         motion_variable = motion_variable.to(self.device)
         object_variable = object_variable.to(self.device)
-        
-        if self.cfg.opt_encoder:
-            # input_variable, motion_variable = self.encoder(input_variable, 
-            #                                                motion_variable)
-            v_features, r_obj_feats, r_hat = self.encoder(input_variable, 
-                                                          motion_variable,
-                                                          object_variable)
-
-        aligned_objects = self.objectAlign(r_obj_feats, r_hat)    
-        
         target_variable = target_variable.to(self.device)
         mask = mask.byte().to(self.device)
+        
+        if self.cfg.opt_encoder:
+            v_features, r_hat = self.encoder(input_variable, 
+                                             motion_variable, 
+                                             object_variable)
+
+        r_hat = self.align_object_variable(object_variable.detach(), r_hat.detach())  
         
         # Forward pass through encoder
         decoder_input = torch.LongTensor([[self.cfg.SOS_token for _ in range(self.cfg.batch_size)]])
@@ -587,7 +523,6 @@ class ORG_TRL(nn.Module):
         
         # concat the input and motion variable
         # v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device) 
-
         # Forward batch of sequences through decoder one time step at a time
         if use_teacher_forcing:
             for t in range(max_target_len):
@@ -595,7 +530,7 @@ class ORG_TRL(nn.Module):
                                                                                         decoder_hidden_attn,
                                                                                         decoder_hidden_lang, 
                                                                                         v_features, 
-                                                                                        aligned_objects)
+                                                                                        r_hat)
                 
                 # Teacher forcing: next input comes from ground truth(data distribution)
                 decoder_input = target_variable[t].view(1, -1)

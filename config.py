@@ -112,7 +112,7 @@ class ConfigORGTRL:
         # New Configuration
         self.object_input_size = 1024
         self.object_projected_size = 512
-        self.object_kernel_size = 1
+        self.object_kernel_size = (1, 1)
         self.opt_encoder = opt_encoder
         
         
