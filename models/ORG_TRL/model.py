@@ -102,12 +102,12 @@ class Encoder(nn.Module):
         ## yang direshape langsung menjadi (batch_size * num_objects, dim_feature, frame_len)
         ## Intinya memproyeksikan dengan input
         ## yang direshape langsung menjadi (batch_size * num_objects, dim_feature, frame_len)
-        r_feats = F.relu(self.object_projection(object_feat.permute(0, 3, 1, 2)))
+        r_feats = self.object_projection(object_feat.permute(0, 3, 1, 2))
         
         ## r_feats (batch_size, dim_feature, height, width)
         r_hat = self.org_module(r_feats)
 
-        return v_feats, r_hat
+        return v_feats, r_feats, r_hat
     
 
 class TemporalAttention(nn.Module):
@@ -503,11 +503,10 @@ class ORG_TRL(nn.Module):
         mask = mask.byte().to(self.device)
         
         if self.cfg.opt_encoder:
-            v_features, r_hat = self.encoder(input_variable, 
-                                             motion_variable, 
-                                             object_variable)
+            v_features, r_feats, r_hat = self.encoder(input_variable, motion_variable, 
+                                                      object_variable)
 
-        r_hat = self.align_object_variable(object_variable.detach(), r_hat.detach())  
+        aligned_objects = self.align_object_variable(r_feats, r_hat)  
         
         # Forward pass through encoder
         decoder_input = torch.LongTensor([[self.cfg.SOS_token for _ in range(self.cfg.batch_size)]])
@@ -530,7 +529,7 @@ class ORG_TRL(nn.Module):
                                                                                         decoder_hidden_attn,
                                                                                         decoder_hidden_lang, 
                                                                                         v_features, 
-                                                                                        r_hat)
+                                                                                        aligned_objects)
                 
                 # Teacher forcing: next input comes from ground truth(data distribution)
                 decoder_input = target_variable[t].view(1, -1)
@@ -661,26 +660,23 @@ class ORG_TRL(nn.Module):
         input_variable = input_variable.to(self.device)
         motion_variable = motion_variable.to(self.device)
         object_variable = object_variable.to(self.device)
+        target_variable = target_variable.to(self.device)
+        mask = mask.byte().to(self.device)
         
         if self.cfg.opt_encoder:
             # input_variable, motion_variable = self.encoder(input_variable, 
             #                                                motion_variable)
-            v_features, r_obj_feats, r_hat = self.encoder(input_variable, 
-                                                          motion_variable,
-                                                          object_variable)
+            v_features, r_feats, r_hat = self.encoder(input_variable, motion_variable, 
+                                                      object_variable)
 
-        aligned_objects = self.objectAlign(r_obj_feats, r_hat)    
-        
-        target_variable = target_variable.to(self.device)
-        mask = mask.byte().to(self.device)
+        aligned_objects = self.align_object_variable(r_feats, r_hat)
         
         # Forward pass through encoder
         decoder_input = torch.LongTensor([[self.cfg.SOS_token for _ in range(10)]])
         decoder_input = decoder_input.to(self.device)
 
-        decoder_hidden = torch.zeros(self.cfg.n_layers, 
-                                     10,
-                                     self.cfg.decoder_hidden_size).to(self.device)
+        decoder_hidden = torch.zeros(self.cfg.n_layers, 10, self.cfg.decoder_hidden_size).\
+            to(self.device)
         
         if self.cfg.decoder_type == 'lstm':
             decoder_hidden_attn = (decoder_hidden, decoder_hidden)
@@ -789,7 +785,6 @@ class ORG_TRL(nn.Module):
         return caption, caps_text, torch.stack(attention_values,0).cpu().numpy()
     
 
-
     @torch.no_grad()
     def BeamDecoding(self, 
                      feats, 
@@ -814,11 +809,9 @@ class ORG_TRL(nn.Module):
         if self.cfg.opt_encoder:
             # feats, motion_feats = self.encoder(feats, motion_feats)
             # v_features = self.encoder(feats, motion_feats) 
-            v_features, r_obj_feats, r_hat = self.encoder(feats, 
-                                                          motion_feats,
-                                                          object_feats)   
+            v_features, r_feats, r_hat = self.encoder(feats, motion_feats, object_feats)   
 
-        aligned_objects = self.objectAlign(r_obj_feats, r_hat)
+        aligned_objects = self.align_object_variable(r_feats, r_hat)
 
         # inisialisasi h_0 atau hidden state awal
         hidden = torch.zeros(self.cfg.n_layers, batch_size, self.cfg.decoder_hidden_size).to(self.device)
