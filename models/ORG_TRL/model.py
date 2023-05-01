@@ -96,18 +96,16 @@ class Encoder(nn.Module):
         
     def forward(self, appearance_feat, motion_feat, object_feat):
         v_feats = torch.cat([appearance_feat, motion_feat], dim=-1)
+        ## jointly representation 512-D
         v_feats = self.v_projection_layer(v_feats)
         
-        ## Intinya memproyeksikan dengan input
-        ## yang direshape langsung menjadi (batch_size * num_objects, dim_feature, frame_len)
-        ## Intinya memproyeksikan dengan input
-        ## yang direshape langsung menjadi (batch_size * num_objects, dim_feature, frame_len)
+        ## memproyeksikan menjadi 512-D
         r_feats = self.object_projection(object_feat.permute(0, 3, 1, 2))
         
         ## r_feats (batch_size, dim_feature, height, width)
         r_hat = self.org_module(r_feats)
 
-        return v_feats, r_feats, r_hat
+        return v_feats, r_feats.permute(0, 2, 3, 1), r_hat
     
 
 class TemporalAttention(nn.Module):
@@ -386,7 +384,7 @@ class ORG_TRL(nn.Module):
         else:
             print('Invalid path address given.')
     
-    def align_object_variable(self, object_variable, r_hat):
+    def align_object_variable(self, r_feats, r_hat):
         '''
         align object modul according to ORG-TRL Paper
         refers = https://openaccess.thecvf.com/content_CVPR_2020/papers/Zhang_Object_Relational_Graph_With_Teacher-Recommended_Learning_for_Video_Captioning_CVPR_2020_paper.pdf
@@ -397,8 +395,8 @@ class ORG_TRL(nn.Module):
         '''
         ## Mengambil anchor frame sebagai acuan untuk setiap objek
         ## Memisahkan anchor frame dari keseluruhan fitur objek
-        anchor_frame = object_variable[:, 0]
-        next_frame = object_variable[:, 1:object_variable.size(3)]
+        anchor_frame = r_feats[:, 0]
+        next_frame = r_feats[:, 1:r_feats.size(1)]
         
         ## menghitung cosine similarity scores
         ## matmul( achor_frame, next_frame ) / | anchor_frame | * | next_frame |
@@ -406,7 +404,7 @@ class ORG_TRL(nn.Module):
                             (torch.norm(anchor_frame.unsqueeze(1), dim=-1)[:, :, :, None] * \
                             torch.norm(next_frame, dim=-1)[:, :, None, :]))
 
-        aligned_frames = torch.gather(r_hat[:, 1:r_hat.size(3)], 
+        aligned_frames = torch.gather(r_hat[:, 1:r_hat.size(1)], 
                                       dim=2, 
                                       index=similarity_score.topk(1, -1)[1].\
                                       expand(-1, -1, -1, r_hat.size(-1)))
