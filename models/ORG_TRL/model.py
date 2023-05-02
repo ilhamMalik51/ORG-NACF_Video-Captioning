@@ -24,7 +24,7 @@ import numpy as np
 import os
 import copy
 
-from transformers import BertForMaskedLM
+from transformers import BertForMaskedLM, DistilBertForMaskedLM, MobileBertForMaskedLM
      
      
 class Encoder(nn.Module):
@@ -323,29 +323,79 @@ class ORG_TRL(nn.Module):
             print('Invalid path address given.')
 
     ## NEW TRL TRAINING PARADIGM
-    def set_trl(self, 
-                bert_model_path='bert_finetuned_1000_data_fix.pt',
-                index2bert_path='index2bert_ts.pt'):
+    def set_trl(self, bert_variant="Bert"):
 
-        bert_pth = os.path.join('Saved', bert_model_path)
-        i2b = os.path.join('Saved', index2bert_path)
+        if bert_variant == "Bert":
+            bert_model_path='bert_finetuned_1000_data_fix.pt',
+            index2bert_path='index2bert_ts.pt'
+            
+            bert_pth = os.path.join('Saved', bert_model_path)
+            i2b = os.path.join('Saved', index2bert_path)
 
-        if os.path.exists(bert_pth):
-            self.bert_model = BertForMaskedLM.from_pretrained('bert-base-uncased')
+            if os.path.exists(bert_pth):
+                self.bert_model = BertForMaskedLM.from_pretrained('bert-base-uncased')
 
-            if self.device == 'cpu':
-                self.bert_model.load_state_dict(torch.load(bert_pth, map_location=torch.device('cpu')))
+                if self.device == 'cpu':
+                    self.bert_model.load_state_dict(torch.load(bert_pth, map_location=torch.device('cpu')))
+                else:
+                    self.bert_model.load_state_dict(torch.load(bert_pth))
+                    print('Bert Model Loaded to GPU')
+
+                self.bert_model = self.bert_model.to(self.device)
+                self.index2bert = torch.load(i2b).to(self.device)
+                self.index2bert = self.index2bert.requires_grad_(False)
+
+                print('Fine-tuned Bert Model and Index2Bert Tensor Loaded Successfully')
             else:
-                self.bert_model.load_state_dict(torch.load(bert_pth))
-                print('Bert Model Loaded to GPU')
+                print('File not found Error..')
+        
+        elif bert_variant == "MobileBert":
+            bert_model_path='MobileBert_finetuned_1000_data.pt',
+            index2bert_path='index2mobilebert_ts.pt'
+            
+            bert_pth = os.path.join('Saved', bert_model_path)
+            i2b = os.path.join('Saved', index2bert_path)
 
-            self.bert_model = self.bert_model.to(self.device)
-            self.index2bert = torch.load(i2b).to(self.device)
-            self.index2bert = self.index2bert.requires_grad_(False)
+            if os.path.exists(bert_pth):
+                self.bert_model = MobileBertForMaskedLM.from_pretrained('google/mobilebert-uncased')
 
-            print('Fine-tuned Bert Model and Index2Bert Tensor Loaded Successfully')
-        else:
-            print('File not found Error..')
+                if self.device == 'cpu':
+                    self.bert_model.load_state_dict(torch.load(bert_pth, map_location=torch.device('cpu')))
+                else:
+                    self.bert_model.load_state_dict(torch.load(bert_pth))
+                    print('MobileBert Model Loaded to GPU')
+
+                self.bert_model = self.bert_model.to(self.device)
+                self.index2bert = torch.load(i2b).to(self.device)
+                self.index2bert = self.index2bert.requires_grad_(False)
+
+                print('Fine-tuned MobileBert Model and Index2Bert Tensor Loaded Successfully')
+            else:
+                print('File not found Error..')
+
+        elif bert_variant == "DistilBert":
+            bert_model_path='DistilBert_finetuned_1000_data.pt',
+            index2bert_path='index2distilbert_ts.pt'
+            
+            bert_pth = os.path.join('Saved', bert_model_path)
+            i2b = os.path.join('Saved', index2bert_path)
+
+            if os.path.exists(bert_pth):
+                self.bert_model = DistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
+
+                if self.device == 'cpu':
+                    self.bert_model.load_state_dict(torch.load(bert_pth, map_location=torch.device('cpu')))
+                else:
+                    self.bert_model.load_state_dict(torch.load(bert_pth))
+                    print('DistilBert Model Loaded to GPU')
+
+                self.bert_model = self.bert_model.to(self.device)
+                self.index2bert = torch.load(i2b).to(self.device)
+                self.index2bert = self.index2bert.requires_grad_(False)
+
+                print('Fine-tuned DistilBert Model and Index2DistilBert Tensor Loaded Successfully')
+            else:
+                print('File not found Error..')
             
     def train_epoch(self,
                     dataloader,
