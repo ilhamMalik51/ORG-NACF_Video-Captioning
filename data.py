@@ -41,18 +41,7 @@ def collate_fn(batch): # add support for motion and object features
     lengths = torch.tensor([len(p) for p in label])
     padVar = torch.LongTensor(padList)
 
-    m = []
-    for i, seq in enumerate(padVar):
-        #m.append([])
-        tmp = []
-        for token in seq:
-            if token == 0:
-                tmp.append(int(0))
-            else:
-                tmp.append(1)
-        m.append(tmp)
-        
-    m = torch.tensor(m)
+    m = torch.LongTensor([[1 if token !=0 else 0 for token in seq] for seq in padVar])
     
     return images, padVar, m, max_target_len, ides, motion_batch, object_batch
         

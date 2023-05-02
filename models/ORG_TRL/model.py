@@ -350,7 +350,7 @@ class ORG_TRL(nn.Module):
                 print('File not found Error..')
         
         elif bert_variant == "MobileBert":
-            bert_model_path='MobileBert_finetuned_1000_data.pt',
+            bert_model_path='MobileBert_finetuned_1000_data.pt'
             index2bert_path='index2mobilebert_ts.pt'
             
             bert_pth = os.path.join('Saved', bert_model_path)
@@ -374,7 +374,7 @@ class ORG_TRL(nn.Module):
                 print('File not found Error..')
 
         elif bert_variant == "DistilBert":
-            bert_model_path='DistilBert_finetuned_1000_data.pt',
+            bert_model_path='DistilBert_finetuned_1000_data.pt'
             index2bert_path='index2distilbert_ts.pt'
             
             bert_pth = os.path.join('Saved', bert_model_path)

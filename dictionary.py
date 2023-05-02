@@ -73,7 +73,7 @@ class Vocabulary:
         w2i = os.path.join('Saved', self.name + '_' + word2index_dic)
         i2w = os.path.join('Saved', self.name + '_' + index2word_dic)
         w2c = os.path.join('Saved', self.name + '_' + word2count_dic)
-        b2i = os.path.join('Saved', self.name + '_' + bert2index_dic)
+        b2i = os.path.join('Saved', bert2index_dic)
 
         try:        
             with open(w2i, 'rb') as fp:
