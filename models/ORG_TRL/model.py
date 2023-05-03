@@ -684,24 +684,24 @@ class ORG_TRL(nn.Module):
         
         # concat the input and motion variable
         # v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device) 
+        for t in range(max_target_len):
+            # Forward batch of sequences through decoder one time step at a time
+            decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
+                                                                                    decoder_hidden_attn,
+                                                                                    decoder_hidden_lang, 
+                                                                                    v_features.float())
+            
+            # No teacher forcing: next input is decoder's own current output(model distribution)
+            _, topi = decoder_output.squeeze(0).topk(1)
 
-        # Forward batch of sequences through decoder one time step at a time
-        decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
-                                                                                decoder_hidden_attn,
-                                                                                decoder_hidden_lang, 
-                                                                                v_features.float())
-        
-        # No teacher forcing: next input is decoder's own current output(model distribution)
-        _, topi = decoder_output.squeeze(0).topk(1)
+            decoder_input = torch.LongTensor([[topi[i][0] for i in range(10)]])
 
-        decoder_input = torch.LongTensor([[topi[i][0] for i in range(10)]])
-
-        decoder_input = decoder_input.to(self.device)
-        # Calculate and accumulate loss
-        mask_loss, nTotal = utils.maskNLLLoss(decoder_output, 
-                                                target_variable[t], 
-                                                mask[t],
-                                                self.device)
+            decoder_input = decoder_input.to(self.device)
+            # Calculate and accumulate loss
+            mask_loss, nTotal = utils.maskNLLLoss(decoder_output, 
+                                                    target_variable[t], 
+                                                    mask[t],
+                                                    self.device)
         
         loss += mask_loss
         print_losses.append(mask_loss.item() * nTotal)
