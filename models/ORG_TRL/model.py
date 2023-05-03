@@ -326,11 +326,13 @@ class ORG_TRL(nn.Module):
     def set_trl(self, bert_variant="Bert"):
 
         if bert_variant == "Bert":
-            bert_model_path='bert_finetuned_1000_data_fix.pt',
-            index2bert_path='index2bert_ts.pt'
+            bert_model_path='bert_finetuned_1000_data_fix.pt'
+            index2bert_path='index2mbert_emb.pt'
+            bert2index_path='mbert2index_emb.pt'
             
             bert_pth = os.path.join('Saved', bert_model_path)
             i2b = os.path.join('Saved', index2bert_path)
+            b2i = os.path.join('Saved', bert2index_path)
 
             if os.path.exists(bert_pth):
                 self.bert_model = BertForMaskedLM.from_pretrained('bert-base-uncased')
@@ -342,8 +344,8 @@ class ORG_TRL(nn.Module):
                     print('Bert Model Loaded to GPU')
 
                 self.bert_model = self.bert_model.to(self.device)
-                self.index2bert = torch.load(i2b).to(self.device)
-                self.index2bert = self.index2bert.requires_grad_(False)
+                self.index2bert = torch.load(i2b).to(self.device).requires_grad_(False)
+                self.bert2index = torch.load(b2i).to(self.device).requires_grad_(False)
 
                 print('Fine-tuned Bert Model and Index2Bert Tensor Loaded Successfully')
             else:
@@ -518,7 +520,7 @@ class ORG_TRL(nn.Module):
                                                       self.device)
                 
                 # Preparing input for bert token IDs
-                bert_input = self.index2bert[target_variable.T].detach()
+                bert_input = F.embedding(target_variable.T, self.index2bert).squeeze(-1).long()
                 bert_input[:, t][bert_input[:, t] != 0] = 103
 
                 with torch.no_grad():
@@ -527,7 +529,7 @@ class ORG_TRL(nn.Module):
                 
                 # ambil predicted word pada timestep t
                 topk_bert_probs, topk_indices = torch.topk(bert_output[:, t, :], k=50, dim=-1)
-                topk_indices.apply_(self.index_from_bert) 
+                topk_indices = F.embedding(topk_indices, self.bert2index).squeeze(-1).long()
                 
                 mask_p = torch.ones_like(topk_indices)
                 mask_p[(topk_indices.eq(3) | topk_indices.eq(0))] = 0 # 3 adalah Unknown Token dan 0 adalah Padding Token
@@ -682,44 +684,26 @@ class ORG_TRL(nn.Module):
         # v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device) 
 
         # Forward batch of sequences through decoder one time step at a time
-        if use_teacher_forcing:
-            for t in range(max_target_len):
-                decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
-                                                                                        decoder_hidden_attn,
-                                                                                        decoder_hidden_lang, 
-                                                                                        v_features)
-                
-                # Teacher forcing: next input comes from ground truth(data distribution)
-                decoder_input = target_variable[t].view(1, -1)
-                mask_loss, nTotal = utils.maskNLLLoss(decoder_output.unsqueeze(0), 
-                                                      target_variable[t], 
-                                                      mask[t], 
-                                                      self.device)
-                loss += mask_loss
-                print_losses.append(mask_loss.item() * nTotal)
-                n_totals += nTotal
-        else:
-            for t in range(max_target_len):
-                decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
-                                                                                        decoder_hidden_attn,
-                                                                                        decoder_hidden_lang, 
-                                                                                        v_features.float())
-                
-                # No teacher forcing: next input is decoder's own current output(model distribution)
-                _, topi = decoder_output.squeeze(0).topk(1)
+        decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
+                                                                                decoder_hidden_attn,
+                                                                                decoder_hidden_lang, 
+                                                                                v_features.float())
+        
+        # No teacher forcing: next input is decoder's own current output(model distribution)
+        _, topi = decoder_output.squeeze(0).topk(1)
 
-                decoder_input = torch.LongTensor([[topi[i][0] for i in range(10)]])
+        decoder_input = torch.LongTensor([[topi[i][0] for i in range(10)]])
 
-                decoder_input = decoder_input.to(self.device)
-                # Calculate and accumulate loss
-                mask_loss, nTotal = utils.maskNLLLoss(decoder_output, 
-                                                      target_variable[t], 
-                                                      mask[t],
-                                                      self.device)
-                
-                loss += mask_loss
-                print_losses.append(mask_loss.item() * nTotal)
-                n_totals += nTotal
+        decoder_input = decoder_input.to(self.device)
+        # Calculate and accumulate loss
+        mask_loss, nTotal = utils.maskNLLLoss(decoder_output, 
+                                                target_variable[t], 
+                                                mask[t],
+                                                self.device)
+        
+        loss += mask_loss
+        print_losses.append(mask_loss.item() * nTotal)
+        n_totals += nTotal
         
         return sum(print_losses) / n_totals
 
