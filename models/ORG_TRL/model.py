@@ -379,10 +379,12 @@ class ORG_TRL(nn.Module):
 
         elif bert_variant == "DistilBert":
             bert_model_path='DistilBert_finetuned_1000_data.pt'
-            index2bert_path='index2distilbert_ts.pt'
+            index2bert_path='index2dbert_emb.pt'
+            bert2index_path='dbert2index_emb.pt'
             
             bert_pth = os.path.join('Saved', bert_model_path)
             i2b = os.path.join('Saved', index2bert_path)
+            b2i = os.path.join('Saved', bert2index_path)
 
             if os.path.exists(bert_pth):
                 self.bert_model = DistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
@@ -394,10 +396,12 @@ class ORG_TRL(nn.Module):
                     print('DistilBert Model Loaded to GPU')
 
                 self.bert_model = self.bert_model.to(self.device)
-                self.index2bert = torch.load(i2b).to(self.device)
-                self.index2bert = self.index2bert.requires_grad_(False)
+                self.index2bert = torch.load(i2b).to(self.device).requires_grad_(False)
+                self.bert2index = torch.load(b2i).to(self.device).requires_grad_(False)
 
                 print('Fine-tuned DistilBert Model and Index2DistilBert Tensor Loaded Successfully')
+                print("dbert2ndex embedding shape: {}".format(self.bert2index.shape))
+                print("index2dbert embedding shape: {}".format(self.index2bert.shape))
             else:
                 print('File not found Error..')
             
