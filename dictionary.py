@@ -66,12 +66,12 @@ class Vocabulary:
     def load(self, 
              word2index_dic = 'word2index_dic.p', 
              index2word_dic = 'index2word_dic.p',
-             word2count_dic = 'word2count_dic.p'
+             word2count_dic = 'word2count_dic.p',
              ):
 
-        w2i = os.path.join('Saved',self.name+'_'+word2index_dic)
-        i2w = os.path.join('Saved',self.name+'_'+index2word_dic)
-        w2c = os.path.join('Saved',self.name+'_'+word2count_dic)
+        w2i = os.path.join('Saved', self.name + '_' + word2index_dic)
+        i2w = os.path.join('Saved', self.name + '_' + index2word_dic)
+        w2c = os.path.join('Saved', self.name + '_' + word2count_dic)
 
         try:        
             with open(w2i, 'rb') as fp:
@@ -85,6 +85,7 @@ class Vocabulary:
             
             self.num_words = len(self.word2index)
 
+            print('All files loaded succesfully!')
         except:
             print('File loading error.. check the path or filename is correct')
 

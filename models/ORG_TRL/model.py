@@ -23,6 +23,8 @@ import itertools
 import numpy as np
 import os
 import copy
+
+from transformers import BertForMaskedLM, DistilBertForMaskedLM, MobileBertForMaskedLM
      
 class ORG(nn.Module):
     def __init__(self, cfg):
@@ -222,6 +224,8 @@ class DecoderRNN(nn.Module):
             torch.from_numpy(voc.gloVe_embedding).float(),
             freeze=False,
             padding_idx=0)
+        
+        self.embedding_dropout = nn.Dropout(self.dropout)
 
         # CHECK NEW
         # self.embedding = nn.Embedding(voc.num_words, cfg.embedding_size)
@@ -242,6 +246,7 @@ class DecoderRNN(nn.Module):
         
         # CHECK NEW
         self.temporal_attention = TemporalAttention(cfg)
+
         self.spatial_attention = SpatialAttention(cfg)
 
         self.embedding_dropout = nn.Dropout(cfg.dropout)
@@ -281,6 +286,14 @@ class DecoderRNN(nn.Module):
         '''
 
         embedded = self.embedding(inputs) # [inputs:(1, batch)  outputs:(1, batch, embedding_size)]
+        embedded = self.embedding_dropout(embedded)
+
+        # last_hidden_lang = lang_hidden[0] if self.decoder_type=='lstm' else lang_hidden
+        # last_hidden_lang = last_hidden_lang.view(self.n_layers, 
+        #                                          last_hidden_lang.size(1), 
+        #                                          last_hidden_lang.size(2))
+        # last_hidden_lang = last_hidden_lang[-1]
+
 
         # global mean pooled the v features
         v_bar_features = torch.mean(v_features, dim=1, keepdim=True).squeeze(1).unsqueeze(0)
@@ -303,6 +316,7 @@ class DecoderRNN(nn.Module):
         # context global vector
         # is the product of element-wise multiplication of
         # attention weight and v_features (batch_size, features_size * 2)
+
         context_global_vector, alpha = self.temporal_attention(last_hidden_attn, v_features)
         
         local_aligned_features = torch.sum(torch.mul(aligned_objects, alpha.unsqueeze(-1)), dim=1)
@@ -317,9 +331,9 @@ class DecoderRNN(nn.Module):
 
         output, h_lang_lstm = self.language_lstm(input_lang_lstm, lang_hidden) # (1, 100, 512)
         
-        output = output.squeeze(0) # (batch_size, features_From LSTM) (100, 512)
-        output = self.out(output) # (batch_size, vocabulary_size) (100, num_words)
-        output = F.softmax(output, dim = 1) # In Probability Value (batch_size, vocabulary_size) (100, num_words)
+        output = output.squeeze(0) # (batch_size, features_From LSTM) (128, 512)
+        output = self.out(output) # (batch_size, vocabulary_size) (128, num_words)
+        output = F.softmax(output, dim = 1) # In Probability Value (batch_size, vocabulary_size) (128, num_words)
         
         return output, h_attn_lstm, h_lang_lstm
     
@@ -329,7 +343,7 @@ class ORG_TRL(nn.Module):
                  voc, 
                  cfg, 
                  path):
-        super(ORG_TRL,self).__init__()
+        super(ORG_TRL, self).__init__()
 
         self.voc = voc
         self.path = path
@@ -354,6 +368,8 @@ class ORG_TRL(nn.Module):
         if cfg.opt_param_init:
             self.init_params()
         
+    def index_from_bert(self, x):
+        return self.cfg.bert2index.get(x)
         
     def init_params(self):
         for name, param in self.decoder.named_parameters():
@@ -370,7 +386,7 @@ class ORG_TRL(nn.Module):
         self.teacher_forcing_ratio = cfg.teacher_forcing_ratio
         
         
-    def load(self, encoder_path = 'Save/ORG_Encoder_10.pt', decoder_path='Saved/ORG_Decoder_10.pt'):
+    def load(self, encoder_path = 'Save/ORG_Encoder_10.pt', decoder_path = 'Saved/ORG_Decoder_10.pt'):
         if os.path.exists(encoder_path) and os.path.exists(decoder_path):
             self.encoder.load_state_dict(torch.load(encoder_path))
             self.decoder.load_state_dict(torch.load(decoder_path))
@@ -379,10 +395,93 @@ class ORG_TRL(nn.Module):
 
     def save(self, encoder_path, decoder_path):
         if os.path.exists(encoder_path) and os.path.exists(decoder_path):
-            torch.save(self.encoder.state_dict(),encoder_path)
-            torch.save(self.decoder.state_dict(),decoder_path)
+            torch.save(self.encoder.state_dict(), encoder_path)
+            torch.save(self.decoder.state_dict(), decoder_path)
         else:
             print('Invalid path address given.')
+
+    ## NEW TRL TRAINING PARADIGM
+    def set_trl(self, bert_variant="Bert"):
+
+        if bert_variant == "Bert":
+            bert_model_path='bert_finetuned_1000_data_fix.pt'
+            index2bert_path='index2mbert_emb.pt'
+            bert2index_path='mbert2index_emb.pt'
+            
+            bert_pth = os.path.join('Saved', bert_model_path)
+            i2b = os.path.join('Saved', index2bert_path)
+            b2i = os.path.join('Saved', bert2index_path)
+
+            if os.path.exists(bert_pth):
+                self.bert_model = BertForMaskedLM.from_pretrained('bert-base-uncased')
+
+                if self.device == 'cpu':
+                    self.bert_model.load_state_dict(torch.load(bert_pth, map_location=torch.device('cpu')))
+                else:
+                    self.bert_model.load_state_dict(torch.load(bert_pth))
+                    print('Bert Model Loaded to GPU')
+
+                self.bert_model = self.bert_model.to(self.device)
+                self.index2bert = torch.load(i2b).to(self.device).requires_grad_(False)
+                self.bert2index = torch.load(b2i).to(self.device).requires_grad_(False)
+
+                print('Fine-tuned Bert Model and Index2Bert Tensor Loaded Successfully')
+            else:
+                print('File not found Error..')
+        
+        elif bert_variant == "MobileBert":
+            bert_model_path='MobileBert_finetuned_1000_data.pt'
+            index2bert_path='index2mbert_emb.pt'
+            bert2index_path='mbert2index_emb.pt'
+            
+            bert_pth = os.path.join('Saved', bert_model_path)
+            i2b = os.path.join('Saved', index2bert_path)
+            b2i = os.path.join('Saved', bert2index_path)
+
+            if os.path.exists(bert_pth):
+                self.bert_model = MobileBertForMaskedLM.from_pretrained('google/mobilebert-uncased')
+
+                if self.device == 'cpu':
+                    self.bert_model.load_state_dict(torch.load(bert_pth, map_location=torch.device('cpu')))
+                else:
+                    self.bert_model.load_state_dict(torch.load(bert_pth))
+                    print('MobileBert Model Loaded to GPU')
+
+                self.bert_model = self.bert_model.to(self.device)
+                self.index2bert = torch.load(i2b).to(self.device).requires_grad_(False)
+                self.bert2index = torch.load(b2i).to(self.device).requires_grad_(False)
+
+                print('Fine-tuned MobileBert Model and Index2Bert Tensor Loaded Successfully')
+            else:
+                print('File not found Error..')
+
+        elif bert_variant == "DistilBert":
+            bert_model_path='DistilBert_finetuned_1000_data.pt'
+            index2bert_path='index2dbert_emb.pt'
+            bert2index_path='dbert2index_emb.pt'
+            
+            bert_pth = os.path.join('Saved', bert_model_path)
+            i2b = os.path.join('Saved', index2bert_path)
+            b2i = os.path.join('Saved', bert2index_path)
+
+            if os.path.exists(bert_pth):
+                self.bert_model = DistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
+
+                if self.device == 'cpu':
+                    self.bert_model.load_state_dict(torch.load(bert_pth, map_location=torch.device('cpu')))
+                else:
+                    self.bert_model.load_state_dict(torch.load(bert_pth))
+                    print('DistilBert Model Loaded to GPU')
+
+                self.bert_model = self.bert_model.to(self.device)
+                self.index2bert = torch.load(i2b).to(self.device).requires_grad_(False)
+                self.bert2index = torch.load(b2i).to(self.device).requires_grad_(False)
+
+                print('Fine-tuned DistilBert Model and Index2DistilBert Tensor Loaded Successfully')
+                print("dbert2ndex embedding shape: {}".format(self.bert2index.shape))
+                print("index2dbert embedding shape: {}".format(self.index2bert.shape))
+            else:
+                print('File not found Error..')
     
     def align_object_variable(self, r_feats, r_hat):
         '''
@@ -535,7 +634,28 @@ class ORG_TRL(nn.Module):
                                                       target_variable[t], 
                                                       mask[t], 
                                                       self.device)
-                loss += mask_loss
+                
+                # Preparing input for bert token IDs
+                bert_input = F.embedding(target_variable.T, self.index2bert).squeeze(-1).long()
+                bert_input[:, t][bert_input[:, t] != 0] = 103
+
+                with torch.no_grad():
+                    bert_output = self.bert_model(bert_input)[0]
+                    bert_output = F.softmax((bert_output / self.cfg.temperature), dim=-1)
+                
+                # ambil predicted word pada timestep t
+                topk_bert_probs, topk_indices = torch.topk(bert_output[:, t, :], k=50, dim=-1)
+                topk_indices = F.embedding(topk_indices, self.bert2index).squeeze(-1).long()
+                
+                mask_p = torch.ones_like(topk_indices)
+                mask_p[(topk_indices.eq(3) | topk_indices.eq(0))] = 0 # 3 adalah Unknown Token dan 0 adalah Padding Token
+
+                kl_loss = utils.KLLoss(torch.gather(decoder_output, 1, topk_indices), 
+                                       topk_bert_probs,
+                                       mask_p, 
+                                       t)
+
+                loss += (((1 - self.cfg.lambda_var) * mask_loss) + (self.cfg.lambda_var * kl_loss))
                 print_losses.append(mask_loss.item() * nTotal)
                 n_totals += nTotal
         else:
@@ -585,6 +705,7 @@ class ORG_TRL(nn.Module):
              epoch_loss : Average single time step loss for an epoch
         '''
         total_loss = 0
+
         print_loss = 0
 
         for data in dataloader:
@@ -601,7 +722,6 @@ class ORG_TRL(nn.Module):
                                   use_teacher_forcing)
             print_loss += loss
             total_loss += loss
-
         return total_loss/len(dataloader)
         
     @torch.no_grad()
@@ -620,7 +740,6 @@ class ORG_TRL(nn.Module):
             clip : clip the gradients to counter exploding gradient problem.
         Returns:
             iteration_loss : average loss per time step.
-        ''' 
         loss = 0
         print_losses = []
         n_totals = 0
@@ -640,8 +759,7 @@ class ORG_TRL(nn.Module):
         # Forward pass through encoder
         decoder_input = torch.LongTensor([[self.cfg.SOS_token for _ in range(10)]])\
             .to(self.device)
-
-        decoder_hidden = torch.zeros(self.cfg.n_layers, 10, 
+        decoder_hidden = torch.zeros(self.cfg.n_layers, 10,
                                      self.cfg.decoder_hidden_size).to(self.device)
         
         if self.cfg.decoder_type == 'lstm':
@@ -660,8 +778,7 @@ class ORG_TRL(nn.Module):
 
             decoder_input = torch.LongTensor([[topi[i][0] for i in range(10)]])
 
-            decoder_input = decoder_input.to(self.device)
-            
+            decoder_input = decoder_input.to(self.device)            
             # Calculate and accumulate loss
             mask_loss, nTotal = utils.maskNLLLoss(decoder_output, target_variable[t], 
                                                   mask[t], self.device)
@@ -921,5 +1038,3 @@ class ORG_TRL(nn.Module):
             caps_text.append(' '.join(x for x in eee).strip())
         
         return caps_text
-    
-   

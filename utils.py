@@ -80,6 +80,18 @@ class Utils:
         loss = crossEntropy.masked_select(mask).mean()
         loss = loss.to(device)
         return loss, nTotal.item()
+    
+    @staticmethod
+    def KLLoss(proba_p, proba_q, mask, t):
+        '''
+        Simplified Kullback-Leibler divergence loss
+        refers: https://openaccess.thecvf.com/content_CVPR_2020/papers/Zhang_Object_Relational_Graph_With_Teacher-Recommended_Learning_for_Video_Captioning_CVPR_2020_paper.pdf
+        '''
+        log_loss_p = torch.log(proba_p) # perlu dikali mask karena unknown token tidak dihitung untuk loss
+        log_loss_p = log_loss_p * mask
+        kl_loss = (-(proba_q * log_loss_p).sum(dim=-1)).mean()
+        
+        return kl_loss
  
     @staticmethod
     def score(ref, hypo):
@@ -114,7 +126,7 @@ class Utils:
         
         #video_path = video_path_dict[video_name]
         # Path to video file 
-        video_path = video_path+video_name  #Changes
+        video_path = video_path + video_name  #Changes
         vidObj = cv2.VideoCapture(video_path) 
         count = 0
         fail = 0

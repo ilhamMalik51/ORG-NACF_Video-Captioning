@@ -68,7 +68,7 @@ class CustomDataset(Dataset):
     def __len__(self):
         return len(self.v_name_list)
     
-    def __getitem__(self,idx): 
+    def __getitem__(self, idx): 
         anno = random.choice(self.annotation_dict[self.v_name_list[idx]])
         anno_index = []
         for word in anno.split(' '):
@@ -88,7 +88,7 @@ class CustomDataset(Dataset):
         if self.motion_feature_dict == None:
             motion_tensor = torch.zeros_like(appearance_tensor)
         else:
-             motion_tensor = torch.tensor(self.motion_feature_dict[self.v_name_list[idx]]).float()
+            motion_tensor = torch.tensor(self.motion_feature_dict[self.v_name_list[idx]]).float()
         
         if self.object_feature_dict == None:
             object_tensor = torch.zeros_like(appearance_tensor)
@@ -238,7 +238,6 @@ class DataHandler:
     
 
     def getDatasets(self):
-        
         if self.cfg.model_name =='marn' or self.cfg.model_name == 'sa-lstm':
             # train_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.train_dict, self.train_name_list, self.voc,
             #                           self.motion_feature_dict, self.object_feature_dict)

@@ -40,15 +40,7 @@ class Evaluator:
 
         with torch.no_grad():
             for data in self.dataloader:
-                features, targets, mask, max_length, ides, motion_feat, object_feat= data
-
-                # if self.cfg.model_name == 'mean_pooling':
-                #     if self.decoding_type == 'greedy':
-                #         cap, cap_txt = model.GreedyDecoding(features.to(self.cfg.device))
-
-                #     if self.decoding_type == 'beam':
-                #         tensor, cap_txt, scores = model.BeamDecoding(features.to(self.cfg.device),
-                #                                                      return_single=True)
+                features, targets, mask, max_length,ides,motion_feat,object_feat= data
                     
                 if self.cfg.model_name == 'sa-lstm':
                     # if self.decoding_type == 'greedy':
@@ -60,20 +52,6 @@ class Evaluator:
                                                      motion_feat.to(self.cfg.device),
                                                      object_feat.to(self.cfg.device),
                                                      self.cfg.beam_length)
-                        
-                        
-                # if self.cfg.model_name == 'recnet':
-                #     if self.decoding_type == 'greedy':
-                #         cap,cap_txt,_ = model.GreedyDecoding(features.to(self.cfg.device))
-                #     else:
-                #         cap_txt = model.BeamDecoding(features.to(self.cfg.device), self.cfg.beam_length)
-                    
-                # if self.cfg.model_name == 's2vt':
-                #     if self.decoding_type == 'greedy':
-                #         pass #yet to implement
-                #     else:
-                #         pass # yet ti implement
-
                 ide_list += ides
                 caption_list += cap_txt
 
