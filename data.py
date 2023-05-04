@@ -16,16 +16,16 @@ import numpy as np
 import torch
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader,Dataset
+from torch.utils.data import DataLoader, Dataset
 from torch.nn import functional as F
 
 def collate_fn(batch): # add support for motion and object features
     '''
     Custom collate function for supporting batching during training and inference. 
     '''
-   
     data = [item[0] for item in batch]
-    images = torch.stack(data, 0)    
+    images = torch.stack(data, 0)
+
     label = [item[1] for item in batch]
     ides = [item[2] for item in batch]
     
@@ -33,7 +33,7 @@ def collate_fn(batch): # add support for motion and object features
     motion_batch = torch.stack(motion, 0)
     
     object_ = [item[4] for item in batch]
-    object_batch = torch.stack(object_,0)
+    object_batch = torch.stack(object_, 0)
 
     max_target_len = max([len(indexes) for indexes in label])
     padList = list(itertools.zip_longest(*label, fillvalue = 0))
@@ -108,32 +108,19 @@ class DataHandler:
         self.motion_feature_dict = {}
         self.object_feature_dict = {}  # For Future use
 
-        if cfg.dataset == 'msvd':  # For MSVD dataset
+        # if cfg.dataset == 'msvd':  # For MSVD dataset
                
-            self._msvd_create_dict() # Reference caption dictionaries
-            # read appearance feature file
-            self.appearance_feature_dict = self._read_feature_file(feature_type='appearance')
-            # read motion feature file
-            if cfg.model_name == 'marn':
-                if cfg.opt_motion_feature:
-                    self.motion_feature_dict = self._read_feature_file(feature_type='motion')
-                # read object feature file
-                if cfg.opt_object_feature:
-                    self.object_feature_dict = self._read_feature_file(feature_type='object')
+        #     self._msvd_create_dict() # Reference caption dictionaries
+        #     # read appearance feature file
+        #     self.appearance_feature_dict = self._read_feature_file(feature_type='appearance')
+        #     # read motion feature file
 
         if cfg.dataset == 'msrvtt':
             self.train_dict, self.val_dict, self.test_dict = self._msrvtt_create_dict() # Reference caption dictionaries
             # read appearance feature file
             self.appearance_feature_dict = self._read_feature_file(feature_type='appearance')
             self.motion_feature_dict = self._read_feature_file(feature_type='motion')
-
-            # read motion feature file
-            if cfg.model_name == 'marn':
-                if cfg.opt_motion_feature:
-                    self.motion_feature_dict = self._read_feature_file(feature_type='motion')
-                # read object feature file
-                if cfg.opt_object_feature:
-                    self.object_feature_dict = self._read_feature_file(feature_type='object')
+            self.object_feature_dict = self._read_feature_file(feature_type='object')
 
 
         self.train_name_list = list(self.train_dict.keys())
@@ -155,12 +142,12 @@ class DataHandler:
                 arr = f1[key][:]
                 if arr.shape[0] < self.cfg.frame_len:
                     pad = self.cfg.frame_len - arr.shape[0]
-                    arr = np.concatenate((arr,np.zeros((pad,arr.shape[1]))),axis = 0)
+                    arr = np.concatenate((arr, np.zeros((pad,arr.shape[1]))),axis = 0)
                 feature_dict[key] = arr
 
-        if self.cfg.model_name == 'mean_pooling':
-            for key in f1.keys():
-                feature_dict[key] = f1[key].value.mean(axis=0)
+        # if self.cfg.model_name == 'mean_pooling':
+        #     for key in f1.keys():
+        #         feature_dict[key] = f1[key].value.mean(axis=0)
                 
         return feature_dict
 
@@ -249,6 +236,7 @@ class DataHandler:
 
         return train_dict, val_dict, test_dict
     
+
     def getDatasets(self):
         if self.cfg.model_name =='marn' or self.cfg.model_name == 'sa-lstm':
             # train_dset = CustomDataset(self.cfg,self.appearance_feature_dict, self.train_dict, self.train_name_list, self.voc,
@@ -266,21 +254,24 @@ class DataHandler:
                                        self.train_dict, 
                                        self.train_name_list, 
                                        self.voc,
-                                       self.motion_feature_dict)
+                                       self.motion_feature_dict,
+                                       self.object_feature_dict)
             
             val_dset = CustomDataset(self.cfg, 
                                      self.appearance_feature_dict, 
                                      self.val_dict, 
                                      self.val_name_list, 
                                      self.voc,
-                                     self.motion_feature_dict)
+                                     self.motion_feature_dict,
+                                     self.object_feature_dict)
             
             test_dset = CustomDataset(self.cfg,
                                       self.appearance_feature_dict, 
                                       self.test_dict, 
                                       self.test_name_list,
                                       self.voc,
-                                      self.motion_feature_dict)
+                                      self.motion_feature_dict,
+                                      self.object_feature_dict)
             
         # if self.cfg.model_name == 'mean_pooling' or self.cfg.model_name == 'recnet':
         #     train_dset = CustomDataset(self.cfg,
@@ -315,17 +306,17 @@ class DataHandler:
                                   )
 
         val_loader = DataLoader(val_dset, 
-                                batch_size = 10, 
+                                batch_size=10, 
                                 num_workers=8, 
-                                shuffle = False,
-                                collate_fn = collate_fn,
+                                shuffle=False,
+                                collate_fn=collate_fn,
                                 drop_last=False)
         
         test_loader = DataLoader(test_dset, 
-                                 batch_size = 10, 
+                                 batch_size=10, 
                                  num_workers=8,
-                                 shuffle = False,
-                                 collate_fn = collate_fn,
+                                 shuffle=False,
+                                 collate_fn=collate_fn,
                                  drop_last=False)
         
         return train_loader, val_loader, test_loader

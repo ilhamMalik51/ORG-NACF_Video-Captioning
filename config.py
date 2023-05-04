@@ -65,6 +65,7 @@ class Path:
                 self.appearance_feature_file = os.path.join(self.feature_path,'MSRVTT_APPEARANCE_RESNET101_28.hdf5')
 
             self.motion_feature_file = os.path.join(self.feature_path,'MSRVTT_MOTION_RESNEXT101.hdf5')
+            self.object_feature_file = os.path.join(self.feature_path,'MSRVTT_OBJECT_FASTERRCNN_RESNEXT_28.hdf5')
 
             self.val_id_list = list(range(6513,7010))
             self.train_id_list = list(range(0,6513))
@@ -99,7 +100,7 @@ class ConfigORGTRL:
         self.max_caption_length = 24
         
         
-        #Encoder configuration
+        # Encoder configuration
         self.appearance_feature_extractor = 'inceptionresnetv2'
         self.motion_feature_extractor = 'resnext101'
         self.frame_len = 28
@@ -108,6 +109,10 @@ class ConfigORGTRL:
         self.appearance_projected_size = 512
         self.motion_input_size = 2048
         self.motion_projected_size = 512
+        # New Configuration
+        self.object_input_size = 1024
+        self.object_projected_size = 512
+        self.object_kernel_size = (1, 1)
         self.opt_encoder = opt_encoder
         
         
@@ -136,7 +141,7 @@ class ConfigORGTRL:
         # context global, context local, and attentionLSTM hidden state
         # this implementation STILL USE CONTEXT GLOBAL AND ATTENTION LSTM HIDDEN STATE
         # CEK THE INPUT SIZE
-        self.language_lstm_input_size = self.appearance_projected_size + self.decoder_hidden_size 
+        self.language_lstm_input_size = self.appearance_projected_size + self.object_projected_size + self.decoder_hidden_size 
 
         self.n_layers = 1
         self.embed_dropout = 0.5
