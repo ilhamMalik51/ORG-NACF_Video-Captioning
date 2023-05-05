@@ -718,8 +718,7 @@ class ORG_TRL(nn.Module):
                                   object_features, 
                                   targets, 
                                   mask, 
-                                  max_length, 
-                                  use_teacher_forcing)
+                                  max_length)
             print_loss += loss
             total_loss += loss
         return total_loss/len(dataloader)
@@ -741,7 +740,7 @@ class ORG_TRL(nn.Module):
         Returns:
             iteration_loss : average loss per time step.
         '''
-        
+
         loss = 0
         print_losses = []
         n_totals = 0
