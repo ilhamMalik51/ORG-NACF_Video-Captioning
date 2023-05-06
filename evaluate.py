@@ -50,7 +50,6 @@ class Evaluator:
                     if self.decoding_type == 'beam':
                         cap_txt = model.BeamDecoding(features.to(self.cfg.device), 
                                                      motion_feat.to(self.cfg.device),
-                                                     object_feat.to(self.cfg.device),
                                                      self.cfg.beam_length)
                 ide_list += ides
                 caption_list += cap_txt
