@@ -580,8 +580,7 @@ class ORG_TRL(nn.Module):
                                   motion_features, 
                                   targets, 
                                   mask, 
-                                  max_length, 
-                                  use_teacher_forcing)
+                                  max_length)
             print_loss += loss
             total_loss += loss
         return total_loss/len(dataloader)
