@@ -108,19 +108,11 @@ class DataHandler:
         self.motion_feature_dict = {}
         self.object_feature_dict = {}  # For Future use
 
-        # if cfg.dataset == 'msvd':  # For MSVD dataset
-               
-        #     self._msvd_create_dict() # Reference caption dictionaries
-        #     # read appearance feature file
-        #     self.appearance_feature_dict = self._read_feature_file(feature_type='appearance')
-        #     # read motion feature file
-
         if cfg.dataset == 'msrvtt':
             self.train_dict, self.val_dict, self.test_dict = self._msrvtt_create_dict() # Reference caption dictionaries
-            # read appearance feature file
             self.appearance_feature_dict = self._read_feature_file(feature_type='appearance')
             self.motion_feature_dict = self._read_feature_file(feature_type='motion')
-            self.object_feature_dict = self._read_feature_file(feature_type='object')
+            # self.object_feature_dict = self._read_feature_file(feature_type='object')
 
 
         self.train_name_list = list(self.train_dict.keys())
@@ -144,10 +136,6 @@ class DataHandler:
                     pad = self.cfg.frame_len - arr.shape[0]
                     arr = np.concatenate((arr, np.zeros((pad,arr.shape[1]))),axis = 0)
                 feature_dict[key] = arr
-
-        # if self.cfg.model_name == 'mean_pooling':
-        #     for key in f1.keys():
-        #         feature_dict[key] = f1[key].value.mean(axis=0)
                 
         return feature_dict
 
@@ -162,14 +150,6 @@ class DataHandler:
             else:
                 dic[l[0]].append(ll)
         return dic
-    
-#     def _name_mapping(self,path):
-#         vid2url = dict()
-#         fil = open(path.name_mapping_file,'r+')
-#         for f in fil.readlines():
-#             l = f.split(' ')
-#             vid2url[l[1].strip('\n')] = l[0]
-#         return vid2url
     
     def _msvd_create_dict(self):
         self.train_dict = self._file_to_dict(self.path.train_annotation_file)
@@ -254,44 +234,21 @@ class DataHandler:
                                        self.train_dict, 
                                        self.train_name_list, 
                                        self.voc,
-                                       self.motion_feature_dict,
-                                       self.object_feature_dict)
+                                       self.motion_feature_dict)
             
             val_dset = CustomDataset(self.cfg, 
                                      self.appearance_feature_dict, 
                                      self.val_dict, 
                                      self.val_name_list, 
                                      self.voc,
-                                     self.motion_feature_dict,
-                                     self.object_feature_dict)
+                                     self.motion_feature_dict)
             
             test_dset = CustomDataset(self.cfg,
                                       self.appearance_feature_dict, 
                                       self.test_dict, 
                                       self.test_name_list,
                                       self.voc,
-                                      self.motion_feature_dict,
-                                      self.object_feature_dict)
-            
-        # if self.cfg.model_name == 'mean_pooling' or self.cfg.model_name == 'recnet':
-        #     train_dset = CustomDataset(self.cfg,
-        #                                self.appearance_feature_dict, 
-        #                                self.train_dict, 
-        #                                self.train_name_list, 
-        #                                self.voc)
-            
-        #     val_dset = CustomDataset(self.cfg,
-        #                              self.appearance_feature_dict, 
-        #                              self.val_dict, 
-        #                              self.val_name_list, 
-        #                              self.voc)
-            
-        #     test_dset = CustomDataset(self.cfg,
-        #                               self.appearance_feature_dict, 
-        #                               self.test_dict, 
-        #                               self.test_name_list, 
-        #                               self.voc)
-            
+                                      self.motion_feature_dict)
             
         return train_dset, val_dset, test_dset
     
