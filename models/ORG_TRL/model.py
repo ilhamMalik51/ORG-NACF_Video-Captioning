@@ -93,6 +93,8 @@ class Encoder(nn.Module):
         self.object_projection = nn.Conv2d(cfg.object_input_size, 
                                            cfg.object_projected_size, 
                                            cfg.object_kernel_size)
+        
+        self.encoder_dropout = nn.Dropout(cfg.encoder_dropout)
 
         self.org_module = ORG(cfg)  
         
@@ -100,9 +102,11 @@ class Encoder(nn.Module):
         v_feats = torch.cat([appearance_feat, motion_feat], dim=-1)
         ## jointly representation 512-D
         v_feats = self.v_projection_layer(v_feats)
-        
+        v_feats = self.encoder_dropout(v_feats)
+
         ## memproyeksikan menjadi 512-D
         r_feats = self.object_projection(object_feat.permute(0, 3, 1, 2))
+        r_feats = self.encoder_dropout(r_feats)
         
         ## r_feats (batch_size, dim_feature, height, width)
         r_hat = self.org_module(r_feats)
