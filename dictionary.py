@@ -67,11 +67,13 @@ class Vocabulary:
              word2index_dic = 'word2index_dic.p', 
              index2word_dic = 'index2word_dic.p',
              word2count_dic = 'word2count_dic.p',
+             bert2index_dic = 'bert2index_dic.p',
              ):
 
         w2i = os.path.join('Saved', self.name + '_' + word2index_dic)
         i2w = os.path.join('Saved', self.name + '_' + index2word_dic)
         w2c = os.path.join('Saved', self.name + '_' + word2count_dic)
+        b2i = os.path.join('Saved', bert2index_dic)
 
         try:        
             with open(w2i, 'rb') as fp:
@@ -83,6 +85,10 @@ class Vocabulary:
             with open(w2c, 'rb') as fp:
                 self.word2count = pickle.load(fp)
             
+            with open(b2i, 'rb') as fp:
+                self.bert2index = pickle.load(fp)
+
+
             self.num_words = len(self.word2index)
 
             print('All files loaded succesfully!')
