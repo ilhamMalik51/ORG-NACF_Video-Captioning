@@ -107,9 +107,10 @@ class Encoder(nn.Module):
         ## memproyeksikan menjadi 512-D
         r_feats = self.object_projection(object_feat.permute(0, 3, 1, 2))
         r_feats = self.encoder_dropout(r_feats)
-        
+
         ## r_feats (batch_size, dim_feature, height, width)
         r_hat = self.org_module(r_feats)
+        r_hat = self.encoder_dropout(r_hat)
 
         return v_feats, r_feats.permute(0, 2, 3, 1), r_hat
     
