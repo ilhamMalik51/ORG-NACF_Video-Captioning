@@ -39,11 +39,15 @@ class ORG(nn.Module):
                         the last fully-connected layer of the backbone
                         of Faster R-CNN
         '''
-        self.sigma_r = nn.Conv2d(in_channels=cfg.object_projected_size, 
+        self.object_projection = nn.Conv2d(cfg.object_input_size, 
+                                           cfg.object_projected_size, 
+                                           cfg.object_kernel_size)
+
+        self.sigma_r = nn.Conv2d(in_channels=cfg.object_input_size, 
                                  out_channels=cfg.object_projected_size,
                                  kernel_size=cfg.object_kernel_size)
         
-        self.psi_r = nn.Conv2d(in_channels=cfg.object_projected_size, 
+        self.psi_r = nn.Conv2d(in_channels=cfg.object_input_size, 
                                  out_channels=cfg.object_projected_size,
                                  kernel_size=cfg.object_kernel_size)
         
@@ -52,29 +56,32 @@ class ORG(nn.Module):
                              kernel_size=cfg.object_kernel_size,
                              bias=False)
     
-    def forward(self, r_feats):
+    def forward(self, object_feat):
         '''
         input:
-          r_feats: The embedded feature into 512-D which has shape of
+          object_feat: The embedded feature into 512-D which has shape of
                    (batch_size, feature_dim, num_frames, num_objects)
         output:
           r_hat: Enhanced features that has the information of relation
                  between objects 
                  (batch_size, num_frames, num_objects, feature_dim)
         '''
+        ## Projected Object Features to 512-D
+        r_feat = self.object_projection(object_feat)
+
         ## Sigma(R) = R . Wi + bi
         ## Psi(R) = R . Wj + bj
         ## A = Simga(R) . Psi(R).T
-        a_coeff = torch.matmul(self.sigma_r(r_feats).permute(0, 2, 3, 1), 
-                               self.psi_r(r_feats).permute(0, 2, 1, 3))
+        a_coeff = torch.matmul(self.sigma_r(object_feat).permute(0, 2, 3, 1), 
+                               self.psi_r(object_feat).permute(0, 2, 1, 3))
         
         ## A_hat = Softmax(A)
         a_hat = F.softmax(a_coeff, dim=-1)
 
         ## R_hat = A_hat . R . Wr
-        r_hat = torch.matmul(a_hat, self.w_r(r_feats).permute(0, 2, 3, 1))
+        r_hat = torch.matmul(a_hat, self.w_r(r_feat).permute(0, 2, 3, 1))
         
-        return r_hat
+        return r_feat.permute(0, 2, 3, 1), r_hat
 
 
 class Encoder(nn.Module):
@@ -90,10 +97,6 @@ class Encoder(nn.Module):
         self.v_projection_layer = nn.Linear(cfg.appearance_input_size + cfg.motion_input_size, #(batch_size, n_frames, 3600)
                                             cfg.appearance_projected_size)
         
-        self.object_projection = nn.Conv2d(cfg.object_input_size, 
-                                           cfg.object_projected_size, 
-                                           cfg.object_kernel_size)
-        
         self.encoder_dropout = nn.Dropout(cfg.encoder_dropout)
 
         self.org_module = ORG(cfg)  
@@ -104,15 +107,11 @@ class Encoder(nn.Module):
         v_feats = self.v_projection_layer(v_feats)
         v_feats = self.encoder_dropout(v_feats)
 
-        ## memproyeksikan menjadi 512-D
-        r_feats = self.object_projection(object_feat.permute(0, 3, 1, 2))
-        r_feats = self.encoder_dropout(r_feats)
-
         ## r_feats (batch_size, dim_feature, height, width)
-        r_hat = self.org_module(r_feats)
+        r_feat, r_hat = self.org_module(object_feat.permute(0, 3, 1, 2))
         r_hat = self.encoder_dropout(r_hat)
 
-        return v_feats, r_feats.permute(0, 2, 3, 1), r_hat
+        return v_feats, r_feat, r_hat
     
 
 class TemporalAttention(nn.Module):
