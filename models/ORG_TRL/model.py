@@ -51,7 +51,7 @@ class ORG(nn.Module):
                                  out_channels=cfg.object_projected_size,
                                  kernel_size=cfg.object_kernel_size)
         
-        self.w_r = nn.Conv2d(in_channels=cfg.object_projected_size, 
+        self.w_r = nn.Conv2d(in_channels=cfg.object_input_size, 
                              out_channels=cfg.object_projected_size,
                              kernel_size=cfg.object_kernel_size,
                              bias=False)
@@ -79,7 +79,7 @@ class ORG(nn.Module):
         a_hat = F.softmax(a_coeff, dim=-1)
 
         ## R_hat = A_hat . R . Wr
-        r_hat = torch.matmul(a_hat, self.w_r(r_feat).permute(0, 2, 3, 1))
+        r_hat = torch.matmul(a_hat, self.w_r(object_feat).permute(0, 2, 3, 1))
         
         return r_feat.permute(0, 2, 3, 1), r_hat
 
