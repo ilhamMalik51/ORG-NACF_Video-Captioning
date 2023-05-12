@@ -157,7 +157,7 @@ class TemporalAttention(nn.Module):
                                            bias=False)
         
         # the dropout rate is 0.5
-        self.attention_dropout = nn.Dropout(cfg.embed_dropout)
+        self.attention_dropout = nn.Dropout(cfg.attn_dropout)
      
     def forward(self, h_attn_lstm, v_features):
         '''
@@ -204,7 +204,7 @@ class SpatialAttention(nn.Module):
                                            1,
                                            bias=False)
         # the dropout rate is 0.5
-        self.attention_dropout = nn.Dropout(cfg.embed_dropout)
+        self.attention_dropout = nn.Dropout(cfg.attn_dropout)
      
     def forward(self, h_attn_lstm, obj_feats):
         '''
@@ -299,6 +299,8 @@ class DecoderRNN(nn.Module):
 
         # h_attn_lstm have the shape of (hidden, cell)
         # hidden has the shape of (n_layer, batch_size, hidden_size)
+        attn_hidden = self.lstm_dropout(attn_hidden)
+
         _, h_attn_lstm = self.attention_lstm(input_attn_lstm, attn_hidden)
         
         # get the last hidden layer
@@ -307,14 +309,14 @@ class DecoderRNN(nn.Module):
                                                  last_hidden_attn.size(1), 
                                                  last_hidden_attn.size(2))
         last_hidden_attn = last_hidden_attn[-1]
-        last_hidden_attn = self.rnn_dropout(last_hidden_attn)
+        last_hidden_attn = self.lstm_dropout(last_hidden_attn)
 
         # context global vector
         # is the product of element-wise multiplication of
         # attention weight and v_features (batch_size, features_size * 2)
         context_global_vector, alpha = self.temporal_attention(last_hidden_attn, v_features)
 
-        context_global_vector = self.embedding_dropout(context_global_vector)
+        context_global_vector = self.lstm_dropout(context_global_vector)
         
         aligned_objects = self.embedding_dropout(aligned_objects)
 
@@ -323,12 +325,12 @@ class DecoderRNN(nn.Module):
         # input local_aligned_features into the spatial attention
         context_local_vector = self.spatial_attention(last_hidden_attn, local_aligned_features)
 
-        context_local_vector = self.embedding_dropout(context_local_vector)
+        context_local_vector = self.lstm_dropout(context_local_vector)
 
         # concat [c_global, c_local, h_attn] (3, 128, 512) (L, N, dim_feature)
         input_lang_lstm = torch.cat((context_global_vector.unsqueeze(0), 
                                      context_local_vector.unsqueeze(0), 
-                                     self.rnn_dropout(h_attn_lstm[0])), dim=-1)
+                                     self.lstm_dropout(h_attn_lstm[0])), dim=-1)
 
         output, h_lang_lstm = self.language_lstm(input_lang_lstm, lang_hidden) # (1, 100, 512)
         

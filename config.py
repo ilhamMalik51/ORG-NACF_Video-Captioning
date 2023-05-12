@@ -144,10 +144,11 @@ class ConfigORGTRL:
         self.language_lstm_input_size = self.appearance_projected_size + self.object_projected_size + self.decoder_hidden_size 
 
         self.n_layers = 1
+        self.input_dropout = 0.3
         self.embed_dropout = 0.5
         self.rnn_dropout = 0.4
+        self.attn_dropout = 0.2
         self.dropout = 0.5
-        self.input_dropout = 0.3
         self.opt_param_init = False
         self.beam_length = 5
         
