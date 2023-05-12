@@ -294,7 +294,6 @@ class DecoderRNN(nn.Module):
                                                  last_hidden_attn.size(1), 
                                                  last_hidden_attn.size(2))
         last_hidden_attn = last_hidden_attn[-1]
-        last_hidden_attn = self.input_feature_dropout(last_hidden_attn)
 
         # context global vector
         # is the product of element-wise multiplication of
