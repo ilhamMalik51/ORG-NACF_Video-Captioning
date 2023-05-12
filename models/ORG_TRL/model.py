@@ -299,8 +299,6 @@ class DecoderRNN(nn.Module):
 
         # h_attn_lstm have the shape of (hidden, cell)
         # hidden has the shape of (n_layer, batch_size, hidden_size)
-        attn_hidden = self.lstm_dropout(attn_hidden)
-
         _, h_attn_lstm = self.attention_lstm(input_attn_lstm, attn_hidden)
         
         # get the last hidden layer
