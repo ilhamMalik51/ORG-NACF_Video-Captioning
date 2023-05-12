@@ -37,20 +37,20 @@ class ORG(nn.Module):
                         the last fully-connected layer of the backbone
                         of Faster R-CNN
         '''
-        self.sigma_r = nn.Conv2d(in_channels=cfg.object_projected_size, 
-                                 out_channels=cfg.object_projected_size,
-                                 kernel_size=cfg.object_kernel_size)
+        self.object_projection = nn.Linear(in_features=cfg.object_input_size,
+                                           out_features=cfg.object_projected_size)
+
+        self.sigma_r = nn.Linear(in_features=cfg.object_input_size,
+                                 out_features=cfg.object_projected_size)
         
-        self.psi_r = nn.Conv2d(in_channels=cfg.object_projected_size, 
-                                 out_channels=cfg.object_projected_size,
-                                 kernel_size=cfg.object_kernel_size)
+        self.psi_r = nn.Linear(in_features=cfg.object_input_size,
+                               out_features=cfg.object_projected_size)
         
-        self.w_r = nn.Conv2d(in_channels=cfg.object_projected_size, 
-                             out_channels=cfg.object_projected_size,
-                             kernel_size=cfg.object_kernel_size,
+        self.w_r = nn.Linear(in_features=cfg.object_input_size, 
+                             out_features=cfg.object_projected_size, 
                              bias=False)
     
-    def forward(self, r_feats):
+    def forward(self, object_variable):
         '''
         input:
           r_feats: The embedded feature into 512-D which has shape of
@@ -60,19 +60,23 @@ class ORG(nn.Module):
                  between objects 
                  (batch_size, num_frames, num_objects, feature_dim)
         '''
+        ## Projected Object Features to 512-D
+        r_feat = self.object_projection(object_variable)
+
         ## Sigma(R) = R . Wi + bi
         ## Psi(R) = R . Wj + bj
         ## A = Simga(R) . Psi(R).T
-        a_coeff = torch.matmul(self.sigma_r(r_feats).permute(0, 2, 3, 1), 
-                               self.psi_r(r_feats).permute(0, 2, 1, 3))
+        a_coeff = torch.bmm(self.sigma_r(object_variable).view(-1, r_feat.size(-2), r_feat.size(-1)), 
+                            self.psi_r(object_variable).contiguous().view(-1, r_feat.size(-2), r_feat.size(-1))\
+                            .transpose(1, 2)).view(r_feat.size(0), r_feat.size(1), r_feat.size(-2), r_feat.size(-2))
         
         ## A_hat = Softmax(A)
         a_hat = F.softmax(a_coeff, dim=-1)
 
         ## R_hat = A_hat . R . Wr
-        r_hat = torch.matmul(a_hat, self.w_r(r_feats).permute(0, 2, 3, 1))
+        r_hat = torch.matmul(a_hat, self.w_r(object_variable))
         
-        return r_hat
+        return r_feat, r_hat
 
 
 class Encoder(nn.Module):
@@ -87,10 +91,6 @@ class Encoder(nn.Module):
         '''
         self.v_projection_layer = nn.Linear(cfg.appearance_input_size + cfg.motion_input_size, #(batch_size, n_frames, 3600)
                                             cfg.appearance_projected_size)
-        
-        self.object_projection = nn.Conv2d(cfg.object_input_size, 
-                                           cfg.object_projected_size, 
-                                           cfg.object_kernel_size)
 
         self.org_module = ORG(cfg)  
         
@@ -99,13 +99,10 @@ class Encoder(nn.Module):
         ## jointly representation 512-D
         v_feats = self.v_projection_layer(v_feats)
         
-        ## memproyeksikan menjadi 512-D
-        r_feats = self.object_projection(object_feat.permute(0, 3, 1, 2))
-        
         ## r_feats (batch_size, dim_feature, height, width)
-        r_hat = self.org_module(r_feats)
+        r_feats, r_hat = self.org_module(object_feat)
 
-        return v_feats, r_feats.permute(0, 2, 3, 1), r_hat
+        return v_feats, r_feats, r_hat
     
 
 class TemporalAttention(nn.Module):
@@ -585,6 +582,7 @@ class ORG_TRL(nn.Module):
              epoch_loss : Average single time step loss for an epoch
         '''
         total_loss = 0
+
         print_loss = 0
 
         for data in dataloader:
@@ -606,7 +604,7 @@ class ORG_TRL(nn.Module):
         
     @torch.no_grad()
     def eval_iter(self, utils, input_variable, motion_variable, object_variable,
-                  target_variable, mask, max_target_len):
+                  target_variable, mask, max_target_len, use_teacher_forcing):
         '''
         Forward propagate input signal and update model for a single iteration. 
         Args:
@@ -650,27 +648,45 @@ class ORG_TRL(nn.Module):
         
         # concat the input and motion variable
         # v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device)        
-        for t in range(max_target_len):
-            decoder_output, decoder_hidden_attn, decoder_hidden_lang =\
-                self.decoder(decoder_input, decoder_hidden_attn, decoder_hidden_lang, 
-                             v_features, aligned_objects)
-            
-            # No teacher forcing: next input is decoder's own current output(model distribution)
-            _, topi = decoder_output.squeeze(0).topk(1)
+        if use_teacher_forcing:
+            for t in range(max_target_len):
+                decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
+                                                                                        decoder_hidden_attn,
+                                                                                        decoder_hidden_lang, 
+                                                                                        v_features, 
+                                                                                        aligned_objects)
+                
+                # Teacher forcing: next input comes from ground truth(data distribution)
+                decoder_input = target_variable[t].view(1, -1)
+                mask_loss, nTotal = utils.maskNLLLoss(decoder_output.unsqueeze(0), 
+                                                      target_variable[t], 
+                                                      mask[t], 
+                                                      self.device)
+                loss += mask_loss
+                print_losses.append(mask_loss.item() * nTotal)
+                n_totals += nTotal
+        else:
+            for t in range(max_target_len):
+                decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
+                                                                                        decoder_hidden_attn,
+                                                                                        decoder_hidden_lang, 
+                                                                                        v_features.float())
+                
+                # No teacher forcing: next input is decoder's own current output(model distribution)
+                _, topi = decoder_output.squeeze(0).topk(1)
 
-            decoder_input = torch.LongTensor([[topi[i][0] for i in range(10)]])
+                decoder_input = torch.LongTensor([[topi[i][0] for i in range(self.cfg.batch_size)]])
 
-            decoder_input = decoder_input.to(self.device)
-            
-            # Calculate and accumulate loss
-            mask_loss, nTotal = utils.maskNLLLoss(decoder_output, target_variable[t], 
-                                                  mask[t], self.device)
-            
-            loss += mask_loss
-            print_losses.append(mask_loss.item() * nTotal)
-            n_totals += nTotal
-        
-        return sum(print_losses) / n_totals
+                decoder_input = decoder_input.to(self.device)
+                # Calculate and accumulate loss
+                mask_loss, nTotal = utils.maskNLLLoss(decoder_output, 
+                                                      target_variable[t], 
+                                                      mask[t],
+                                                      self.device)
+                
+                loss += mask_loss
+                print_losses.append(mask_loss.item() * nTotal)
+                n_totals += nTotal
 
     @torch.no_grad()
     def GreedyDecoding(self, 
