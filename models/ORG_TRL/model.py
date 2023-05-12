@@ -214,31 +214,22 @@ class DecoderRNN(nn.Module):
         self.n_layers = cfg.n_layers
         self.decoder_type = cfg.decoder_type
 
+        # For input features
+        self.input_feature_dropout = nn.Dropout(cfg.input_dropout)
+
         # Define layers
         self.embedding = nn.Embedding.from_pretrained(
             torch.from_numpy(voc.gloVe_embedding).float(),
             freeze=False,
             padding_idx=0)
 
-        # CHECK NEW
-        # self.embedding = nn.Embedding(voc.num_words, cfg.embedding_size)
-
-        # CHECK NEW
-        '''
-        Attention LSTM Module.
-          inputs: Has inputs shape of 1324. This size comes from the concat
-                  operation of global-mean-pooled video features,
-                  previous language lstm hidden state, and
-                  previous word embedding.
-          hidden_size : according to the ORG-TRL paper the hidden state is 512
-        '''
         self.attention_lstm = nn.LSTM(input_size=cfg.attention_lstm_input_size, 
                                       hidden_size=cfg.decoder_hidden_size,
                                       num_layers=self.n_layers, 
                                       dropout=self.rnn_dropout)
         
-        # CHECK NEW
         self.temporal_attention = TemporalAttention(cfg)
+
         self.spatial_attention = SpatialAttention(cfg)
 
         self.embedding_dropout = nn.Dropout(cfg.dropout)
@@ -278,10 +269,12 @@ class DecoderRNN(nn.Module):
         '''
 
         embedded = self.embedding(inputs) # [inputs:(1, batch)  outputs:(1, batch, embedding_size)]
+        embedded = self.embedding_dropout(embedded)
 
         # global mean pooled the v features
         v_bar_features = torch.mean(v_features, dim=1, keepdim=True).squeeze(1).unsqueeze(0)
-        
+        v_bar_features = self.input_feature_dropout(v_bar_features)
+
         # preparing the input for lstm
         # concat [v_bar, word_emb, h_lang_prev] shape(512 + 300 + 512)
         input_attn_lstm = torch.cat((v_bar_features, embedded, lang_hidden[0]), dim=-1)
@@ -296,13 +289,16 @@ class DecoderRNN(nn.Module):
                                                  last_hidden_attn.size(1), 
                                                  last_hidden_attn.size(2))
         last_hidden_attn = last_hidden_attn[-1]
+        last_hidden_attn = self.input_feature_dropout(last_hidden_attn)
 
         # context global vector
         # is the product of element-wise multiplication of
         # attention weight and v_features (batch_size, features_size * 2)
+        v_features = self.input_feature_dropout(v_features)
         context_global_vector, alpha = self.temporal_attention(last_hidden_attn, v_features)
         
         local_aligned_features = torch.sum(torch.mul(aligned_objects, alpha.unsqueeze(-1)), dim=1)
+        local_aligned_features = self.input_feature_dropout(local_aligned_features)
 
         # input local_aligned_features into the spatial attention
         context_local_vector = self.spatial_attention(last_hidden_attn, local_aligned_features)
@@ -315,6 +311,7 @@ class DecoderRNN(nn.Module):
         output, h_lang_lstm = self.language_lstm(input_lang_lstm, lang_hidden) # (1, 100, 512)
         
         output = output.squeeze(0) # (batch_size, features_From LSTM) (100, 512)
+        output = self.input_feature_dropout(output) # for regularization
         output = self.out(output) # (batch_size, vocabulary_size) (100, num_words)
         output = F.softmax(output, dim = 1) # In Probability Value (batch_size, vocabulary_size) (100, num_words)
         
@@ -582,7 +579,6 @@ class ORG_TRL(nn.Module):
              epoch_loss : Average single time step loss for an epoch
         '''
         total_loss = 0
-
         print_loss = 0
 
         for data in dataloader:
@@ -687,6 +683,8 @@ class ORG_TRL(nn.Module):
                 loss += mask_loss
                 print_losses.append(mask_loss.item() * nTotal)
                 n_totals += nTotal
+
+        return sum(print_losses) / n_totals
 
     @torch.no_grad()
     def GreedyDecoding(self, 
