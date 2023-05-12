@@ -155,6 +155,9 @@ class TemporalAttention(nn.Module):
         self.energy_projection = nn.Linear(self.attn_size, 
                                            1, 
                                            bias=False)
+        
+        # the dropout rate is 0.5
+        self.attention_dropout = nn.Dropout(cfg.embed_dropout)
      
     def forward(self, h_attn_lstm, v_features):
         '''
@@ -167,6 +170,9 @@ class TemporalAttention(nn.Module):
         Uh = Uh.unsqueeze(1).expand_as(Wv)
 
         alpha = F.softmax(self.energy_projection(torch.tanh(Wv + Uh)),  dim=1)
+
+        alpha = self.attention_dropout(alpha)
+
         context_global = torch.sum(torch.mul(alpha, v_features), dim=1)
 
         return context_global, alpha
@@ -197,6 +203,8 @@ class SpatialAttention(nn.Module):
         self.energy_projection = nn.Linear(self.bottleneck_size, 
                                            1,
                                            bias=False)
+        # the dropout rate is 0.5
+        self.attention_dropout = nn.Dropout(cfg.embed_dropout)
      
     def forward(self, h_attn_lstm, obj_feats):
         '''
@@ -207,7 +215,10 @@ class SpatialAttention(nn.Module):
         Uh = self.decoder_projection(h_attn_lstm)
         Uh = Uh.unsqueeze(1).expand_as(Wv)
 
-        beta = F.softmax(self.energy_projection(torch.tanh(Wv + Uh)), dim=1)        
+        beta = F.softmax(self.energy_projection(torch.tanh(Wv + Uh)), dim=1)
+
+        beta = self.attention_dropout(beta)
+
         global_context_feature = torch.sum(torch.mul(obj_feats, beta), dim=1)
 
         return global_context_feature
@@ -249,6 +260,8 @@ class DecoderRNN(nn.Module):
         self.spatial_attention = SpatialAttention(cfg)
 
         self.embedding_dropout = nn.Dropout(cfg.dropout)
+
+        self.lstm_dropout = nn.Dropout(cfg.rnn_dropout)
 
         self.language_lstm = nn.LSTM(input_size=cfg.language_lstm_input_size, 
                                      hidden_size=cfg.decoder_hidden_size,
@@ -294,11 +307,14 @@ class DecoderRNN(nn.Module):
                                                  last_hidden_attn.size(1), 
                                                  last_hidden_attn.size(2))
         last_hidden_attn = last_hidden_attn[-1]
+        last_hidden_attn = self.rnn_dropout(last_hidden_attn)
 
         # context global vector
         # is the product of element-wise multiplication of
         # attention weight and v_features (batch_size, features_size * 2)
         context_global_vector, alpha = self.temporal_attention(last_hidden_attn, v_features)
+
+        context_global_vector = self.embedding_dropout(context_global_vector)
         
         aligned_objects = self.embedding_dropout(aligned_objects)
 
@@ -307,10 +323,12 @@ class DecoderRNN(nn.Module):
         # input local_aligned_features into the spatial attention
         context_local_vector = self.spatial_attention(last_hidden_attn, local_aligned_features)
 
+        context_local_vector = self.embedding_dropout(context_local_vector)
+
         # concat [c_global, c_local, h_attn] (3, 128, 512) (L, N, dim_feature)
         input_lang_lstm = torch.cat((context_global_vector.unsqueeze(0), 
                                      context_local_vector.unsqueeze(0), 
-                                     h_attn_lstm[0]), dim=-1)
+                                     self.rnn_dropout(h_attn_lstm[0])), dim=-1)
 
         output, h_lang_lstm = self.language_lstm(input_lang_lstm, lang_hidden) # (1, 100, 512)
         
