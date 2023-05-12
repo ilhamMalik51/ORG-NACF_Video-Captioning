@@ -37,6 +37,12 @@ class ORG(nn.Module):
                         the last fully-connected layer of the backbone
                         of Faster R-CNN
         '''
+        # dropout rate 0.3
+        self.dropout = nn.Dropout(cfg.input_dropout)
+
+        # dropout rate 0.5
+        self.att_weight_dropout = nn.Dropout(cfg.dropout)
+
         self.object_projection = nn.Linear(in_features=cfg.object_input_size,
                                            out_features=cfg.object_projected_size)
 
@@ -60,6 +66,8 @@ class ORG(nn.Module):
                  between objects 
                  (batch_size, num_frames, num_objects, feature_dim)
         '''
+        object_variable = self.dropout(object_variable)
+
         ## Projected Object Features to 512-D
         r_feat = self.object_projection(object_variable)
 
@@ -72,6 +80,9 @@ class ORG(nn.Module):
         
         ## A_hat = Softmax(A)
         a_hat = F.softmax(a_coeff, dim=-1)
+
+        ## Applying Dropout
+        a_hat = self.att_weight_dropout(a_hat) 
 
         ## R_hat = A_hat . R . Wr
         r_hat = torch.matmul(a_hat, self.w_r(object_variable))
@@ -89,13 +100,21 @@ class Encoder(nn.Module):
           input_size : CNN extracted feature size. For ResNet 2048, For inceptionv4 1536
           output_size : Dimention of projected space.
         '''
+        # dropout rate 0.3
+        self.dropout = nn.Dropout(cfg.input_dropout)
+
         self.v_projection_layer = nn.Linear(cfg.appearance_input_size + cfg.motion_input_size, #(batch_size, n_frames, 3600)
                                             cfg.appearance_projected_size)
 
         self.org_module = ORG(cfg)  
         
     def forward(self, appearance_feat, motion_feat, object_feat):
+        
+        appearance_feat = self.dropout(appearance_feat)
+        motion_feat = self.dropout(motion_feat)
+
         v_feats = torch.cat([appearance_feat, motion_feat], dim=-1)
+
         ## jointly representation 512-D
         v_feats = self.v_projection_layer(v_feats)
         
@@ -214,9 +233,6 @@ class DecoderRNN(nn.Module):
         self.n_layers = cfg.n_layers
         self.decoder_type = cfg.decoder_type
 
-        # For input features
-        self.input_feature_dropout = nn.Dropout(cfg.input_dropout)
-
         # Define layers
         self.embedding = nn.Embedding.from_pretrained(
             torch.from_numpy(voc.gloVe_embedding).float(),
@@ -249,16 +265,6 @@ class DecoderRNN(nn.Module):
                 v_features, 
                 aligned_objects):
         '''
-        we run this one step (word) at a time
-        
-        inputs -  (1, batch)
-        hidden - h_n/c_n :(num_layers * num_directions, batch, hidden_size)    
-        GRU:h_n   
-        LSTM:(h_n,c_n)
-        feats - (batch,attention_length,annotation_vector_size) 
-        
-        '''
-        '''
         NEW CHECK
 
         inputs -  (1, batch)
@@ -267,13 +273,12 @@ class DecoderRNN(nn.Module):
         LSTM:(h_n,c_n)
         feats - (batch, attention_length, annotation_vector_size) 
         '''
-
         embedded = self.embedding(inputs) # [inputs:(1, batch)  outputs:(1, batch, embedding_size)]
         embedded = self.embedding_dropout(embedded)
 
         # global mean pooled the v features
+        v_features = self.embedding_dropout(v_features)
         v_bar_features = torch.mean(v_features, dim=1, keepdim=True).squeeze(1).unsqueeze(0)
-        v_bar_features = self.input_feature_dropout(v_bar_features)
 
         # preparing the input for lstm
         # concat [v_bar, word_emb, h_lang_prev] shape(512 + 300 + 512)
@@ -294,11 +299,11 @@ class DecoderRNN(nn.Module):
         # context global vector
         # is the product of element-wise multiplication of
         # attention weight and v_features (batch_size, features_size * 2)
-        v_features = self.input_feature_dropout(v_features)
         context_global_vector, alpha = self.temporal_attention(last_hidden_attn, v_features)
         
+        aligned_objects = self.embedding_dropout(aligned_objects)
+
         local_aligned_features = torch.sum(torch.mul(aligned_objects, alpha.unsqueeze(-1)), dim=1)
-        local_aligned_features = self.input_feature_dropout(local_aligned_features)
 
         # input local_aligned_features into the spatial attention
         context_local_vector = self.spatial_attention(last_hidden_attn, local_aligned_features)
@@ -311,7 +316,7 @@ class DecoderRNN(nn.Module):
         output, h_lang_lstm = self.language_lstm(input_lang_lstm, lang_hidden) # (1, 100, 512)
         
         output = output.squeeze(0) # (batch_size, features_From LSTM) (100, 512)
-        output = self.input_feature_dropout(output) # for regularization
+        output = self.embedding_dropout(output) # for regularization
         output = self.out(output) # (batch_size, vocabulary_size) (100, num_words)
         output = F.softmax(output, dim = 1) # In Probability Value (batch_size, vocabulary_size) (100, num_words)
         

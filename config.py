@@ -147,7 +147,7 @@ class ConfigORGTRL:
         self.embed_dropout = 0.5
         self.rnn_dropout = 0.4
         self.dropout = 0.5
-        self.input_dropout = 0.2
+        self.input_dropout = 0.3
         self.opt_param_init = False
         self.beam_length = 5
         
