@@ -57,6 +57,7 @@ class ORG(nn.Module):
         self.w_r = nn.Linear(in_features=cfg.object_input_size, 
                              out_features=cfg.object_projected_size, 
                              bias=False)
+        nn.init.kaiming_normal_(self.psi_r.weight)
     
     def forward(self, object_variable):
         '''
@@ -75,12 +76,9 @@ class ORG(nn.Module):
 
         ## Sigma(R) = R . Wi + bi
         sigma_r = self.sigma_r(object_variable)
-        sigma_r = F.elu(sigma_r)
-
-        psi_r = self.psi_r(object_variable)
-        psi_r = F.elu(psi_r)
-
         ## Psi(R) = R . Wj + bj
+        psi_r = self.psi_r(object_variable)
+
         ## A = Simga(R) . Psi(R).T
         a_coeff = torch.bmm(sigma_r.view(-1, r_feat.size(-2), r_feat.size(-1)), 
                             psi_r.contiguous().view(-1, r_feat.size(-2), r_feat.size(-1))\
@@ -94,6 +92,8 @@ class ORG(nn.Module):
 
         ## R_hat = A_hat . R . Wr
         r_hat = torch.matmul(a_hat, self.w_r(object_variable))
+
+        r_hat = F.relu(r_hat)
         
         return r_feat, r_hat
 
