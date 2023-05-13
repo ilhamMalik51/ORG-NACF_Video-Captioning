@@ -93,7 +93,7 @@ class ORG(nn.Module):
         ## R_hat = A_hat . R . Wr
         r_hat = torch.matmul(a_hat, self.w_r(object_variable))
 
-        r_hat = F.relu(r_hat)
+        r_hat = F.leaky_relu(r_hat)
         
         return r_feat, r_hat
 
