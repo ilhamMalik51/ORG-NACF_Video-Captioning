@@ -48,9 +48,11 @@ class ORG(nn.Module):
 
         self.sigma_r = nn.Linear(in_features=cfg.object_input_size,
                                  out_features=cfg.object_projected_size)
+        nn.init.kaiming_normal_(self.sigma_r.weight)
         
         self.psi_r = nn.Linear(in_features=cfg.object_input_size,
                                out_features=cfg.object_projected_size)
+        nn.init.kaiming_normal_(self.psi_r.weight)
         
         self.w_r = nn.Linear(in_features=cfg.object_input_size, 
                              out_features=cfg.object_projected_size, 
@@ -72,10 +74,16 @@ class ORG(nn.Module):
         r_feat = self.object_projection(object_variable)
 
         ## Sigma(R) = R . Wi + bi
+        sigma_r = self.sigma_r(object_variable)
+        sigma_r = F.elu(sigma_r)
+
+        psi_r = self.psi_r(object_variable)
+        psi_r = F.elu(psi_r)
+
         ## Psi(R) = R . Wj + bj
         ## A = Simga(R) . Psi(R).T
-        a_coeff = torch.bmm(self.sigma_r(object_variable).view(-1, r_feat.size(-2), r_feat.size(-1)), 
-                            self.psi_r(object_variable).contiguous().view(-1, r_feat.size(-2), r_feat.size(-1))\
+        a_coeff = torch.bmm(sigma_r.view(-1, r_feat.size(-2), r_feat.size(-1)), 
+                            psi_r.contiguous().view(-1, r_feat.size(-2), r_feat.size(-1))\
                             .transpose(1, 2)).view(r_feat.size(0), r_feat.size(1), r_feat.size(-2), r_feat.size(-2))
         
         ## A_hat = Softmax(A)
@@ -157,7 +165,7 @@ class TemporalAttention(nn.Module):
                                            bias=False)
         
         # the dropout rate is 0.5
-        self.attention_dropout = nn.Dropout(cfg.attn_dropout)
+        self.attention_dropout = nn.Dropout(cfg.embed_dropout)
      
     def forward(self, h_attn_lstm, v_features):
         '''
@@ -204,7 +212,7 @@ class SpatialAttention(nn.Module):
                                            1,
                                            bias=False)
         # the dropout rate is 0.5
-        self.attention_dropout = nn.Dropout(cfg.attn_dropout)
+        self.attention_dropout = nn.Dropout(cfg.embed_dropout)
      
     def forward(self, h_attn_lstm, obj_feats):
         '''
@@ -314,7 +322,7 @@ class DecoderRNN(nn.Module):
         # attention weight and v_features (batch_size, features_size * 2)
         context_global_vector, alpha = self.temporal_attention(last_hidden_attn, v_features)
 
-        context_global_vector = self.lstm_dropout(context_global_vector)
+        context_global_vector = self.embedding_dropout(context_global_vector)
         
         aligned_objects = self.embedding_dropout(aligned_objects)
 
@@ -323,7 +331,7 @@ class DecoderRNN(nn.Module):
         # input local_aligned_features into the spatial attention
         context_local_vector = self.spatial_attention(last_hidden_attn, local_aligned_features)
 
-        context_local_vector = self.lstm_dropout(context_local_vector)
+        context_local_vector = self.embedding_dropout(context_local_vector)
 
         # concat [c_global, c_local, h_attn] (3, 128, 512) (L, N, dim_feature)
         input_lang_lstm = torch.cat((context_global_vector.unsqueeze(0), 
@@ -375,7 +383,6 @@ class ORG_TRL(nn.Module):
         for name, param in self.decoder.named_parameters():
             if 'weight' in name:
                 nn.init.orthogonal_(param)
-                #nn.init.kaiming_normal_(param, mode='fan_out', nonlinearity='relu')
    
         
     def update_hyperparameters(self,cfg):
