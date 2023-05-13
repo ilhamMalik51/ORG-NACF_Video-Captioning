@@ -57,7 +57,7 @@ class ORG(nn.Module):
         self.w_r = nn.Linear(in_features=cfg.object_input_size, 
                              out_features=cfg.object_projected_size, 
                              bias=False)
-        nn.init.kaiming_normal_(self.psi_r.weight)
+        nn.init.kaiming_normal_(self.w_r.weight)
     
     def forward(self, object_variable):
         '''
