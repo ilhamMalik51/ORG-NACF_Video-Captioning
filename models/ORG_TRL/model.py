@@ -48,16 +48,13 @@ class ORG(nn.Module):
 
         self.sigma_r = nn.Linear(in_features=cfg.object_input_size,
                                  out_features=cfg.object_projected_size)
-        nn.init.kaiming_normal_(self.sigma_r.weight)
         
         self.psi_r = nn.Linear(in_features=cfg.object_input_size,
                                out_features=cfg.object_projected_size)
-        nn.init.kaiming_normal_(self.psi_r.weight)
         
         self.w_r = nn.Linear(in_features=cfg.object_input_size, 
                              out_features=cfg.object_projected_size, 
                              bias=False)
-        nn.init.kaiming_normal_(self.w_r.weight)
     
     def forward(self, object_variable):
         '''
@@ -92,8 +89,6 @@ class ORG(nn.Module):
 
         ## R_hat = A_hat . R . Wr
         r_hat = torch.matmul(a_hat, self.w_r(object_variable))
-
-        r_hat = F.leaky_relu(r_hat)
         
         return r_feat, r_hat
 
