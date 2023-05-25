@@ -499,7 +499,7 @@ class ORG_TRL(nn.Module):
                                                       self.device)
                 
                 # Preparing input for bert token IDs
-                bert_input = F.embedding(target_variable.T, self.index2bert).squeeze(-1).long()
+                bert_input = F.embedding(target_variable.T, self.index2bert).squeeze(-1)
                 bert_input[:, t][bert_input[:, t] != 0] = 103
 
                 with torch.no_grad():
@@ -508,7 +508,7 @@ class ORG_TRL(nn.Module):
                 
                 # ambil predicted word pada timestep t
                 topk_bert_probs, topk_indices = torch.topk(bert_output[:, t, :], k=50, dim=-1)
-                topk_indices = F.embedding(topk_indices, self.bert2index).squeeze(-1).long()
+                topk_indices = F.embedding(topk_indices, self.bert2index).squeeze(-1)
                 
                 mask_p = torch.ones_like(topk_indices)
                 mask_p[(topk_indices.eq(3) | topk_indices.eq(0))] = 0 # 3 adalah Unknown Token dan 0 adalah Padding Token

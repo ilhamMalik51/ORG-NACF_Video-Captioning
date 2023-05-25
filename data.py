@@ -114,7 +114,6 @@ class DataHandler:
             self.motion_feature_dict = self._read_feature_file(feature_type='motion')
             # self.object_feature_dict = self._read_feature_file(feature_type='object')
 
-
         self.train_name_list = list(self.train_dict.keys())
         self.val_name_list = list(self.val_dict.keys())
         self.test_name_list = list(self.test_dict.keys())
@@ -166,53 +165,52 @@ class DataHandler:
         test_dict = {}
         
         # VANILLA CODE
-        # for datap in train_val_file['sentences']:
-        #     if int(datap['video_id'][5:]) in self.path.train_id_list:
-        #         if datap['video_id'] in list(train_dict.keys()):
-        #             train_dict[datap['video_id']] += [datap['caption']]
-        #         else:
-        #             train_dict[datap['video_id']] = [datap['caption']]
-
-        #     if int(datap['video_id'][5:]) in self.path.val_id_list:
-        #         if datap['video_id'] in list(val_dict.keys()):
-        #             val_dict[datap['video_id']] += [datap['caption']]
-        #         else:
-        #             val_dict[datap['video_id']] = [datap['caption']]
-            
-        # for datap in test_file['sentences']:
-        #     if datap['video_id'] in list(test_dict.keys()):
-        #         test_dict[datap['video_id']] += [datap['caption']]
-        #     else:
-        #         test_dict[datap['video_id']] = [datap['caption']]
-
-        # MODIFIED CODE
-
-        train_id_list = [i for i in range(0, 850)]
-        val_id_list = [i for i in range(850, 900)]
-        test_id_list = [i for i in range(900, 1000)]
-
-        train_dict = {}
-        val_dict = {}
-        test_dict = {}
-
         for datap in train_val_file['sentences']:
-            if int(datap['video_id'][5:]) in train_id_list:
+            if int(datap['video_id'][5:]) in self.path.train_id_list:
                 if datap['video_id'] in list(train_dict.keys()):
                     train_dict[datap['video_id']] += [datap['caption']]
                 else:
                     train_dict[datap['video_id']] = [datap['caption']]
-            
-            if int(datap['video_id'][5:]) in val_id_list:
+
+            if int(datap['video_id'][5:]) in self.path.val_id_list:
                 if datap['video_id'] in list(val_dict.keys()):
                     val_dict[datap['video_id']] += [datap['caption']]
                 else:
                     val_dict[datap['video_id']] = [datap['caption']]
+            
+        for datap in test_file['sentences']:
+            if datap['video_id'] in list(test_dict.keys()):
+                test_dict[datap['video_id']] += [datap['caption']]
+            else:
+                test_dict[datap['video_id']] = [datap['caption']]
+
+        # MODIFIED CODE
+        # train_id_list = [i for i in range(0, 850)]
+        # val_id_list = [i for i in range(850, 900)]
+        # test_id_list = [i for i in range(900, 1000)]
+
+        # train_dict = {}
+        # val_dict = {}
+        # test_dict = {}
+
+        # for datap in train_val_file['sentences']:
+        #     if int(datap['video_id'][5:]) in train_id_list:
+        #         if datap['video_id'] in list(train_dict.keys()):
+        #             train_dict[datap['video_id']] += [datap['caption']]
+        #         else:
+        #             train_dict[datap['video_id']] = [datap['caption']]
+            
+        #     if int(datap['video_id'][5:]) in val_id_list:
+        #         if datap['video_id'] in list(val_dict.keys()):
+        #             val_dict[datap['video_id']] += [datap['caption']]
+        #         else:
+        #             val_dict[datap['video_id']] = [datap['caption']]
                     
-            if int(datap['video_id'][5:]) in test_id_list:
-                if datap['video_id'] in list(test_dict.keys()):
-                    test_dict[datap['video_id']] += [datap['caption']]
-                else:
-                    test_dict[datap['video_id']] = [datap['caption']]
+        #     if int(datap['video_id'][5:]) in test_id_list:
+        #         if datap['video_id'] in list(test_dict.keys()):
+        #             test_dict[datap['video_id']] += [datap['caption']]
+        #         else:
+        #             test_dict[datap['video_id']] = [datap['caption']]
 
         return train_dict, val_dict, test_dict
     

@@ -172,9 +172,9 @@ class ConfigORGTRL:
         self.lambda_var = 0.3 # refers to the best model hyperparams
 
         #Vocabulary configuration
+        self.PAD_token = 0
         self.SOS_token = 1
         self.EOS_token = 2
-        self.PAD_token = 0
         self.UNK_token = 3
         self.vocabulary_min_count = 2   
        
