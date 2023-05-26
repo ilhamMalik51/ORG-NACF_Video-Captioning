@@ -119,8 +119,8 @@ class DataHandler:
         self.test_name_list = list(self.test_dict.keys())
         
     def _read_feature_file(self, feature_type='appearance'):
-        
         feature_dict = {}
+
         if feature_type == 'appearance':
             f1 = h5py.File(self.path.appearance_feature_file,'r+')
         elif feature_type == 'motion':
@@ -141,6 +141,7 @@ class DataHandler:
     def _file_to_dict(self,path):
         dic = dict()
         fil = open(path,'r+')
+
         for f in fil.readlines():
             l = f.split() 
             ll = ' '.join(x for x in l[1:])
@@ -148,6 +149,7 @@ class DataHandler:
                 dic[l[0]] = [ll]
             else:
                 dic[l[0]].append(ll)
+
         return dic
     
     def _msvd_create_dict(self):
@@ -261,14 +263,14 @@ class DataHandler:
                                   )
 
         val_loader = DataLoader(val_dset, 
-                                batch_size=10, 
+                                batch_size=71, 
                                 num_workers=8, 
                                 shuffle=False,
                                 collate_fn=collate_fn,
                                 drop_last=False)
         
         test_loader = DataLoader(test_dset, 
-                                 batch_size=10, 
+                                 batch_size=100, 
                                  num_workers=8,
                                  shuffle=False,
                                  collate_fn=collate_fn,

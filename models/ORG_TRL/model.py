@@ -580,7 +580,7 @@ class ORG_TRL(nn.Module):
                                   motion_features, 
                                   targets, 
                                   mask, 
-                                  max_length,
+                                  max_length, 
                                   use_teacher_forcing)
             print_loss += loss
             total_loss += loss
@@ -608,6 +608,7 @@ class ORG_TRL(nn.Module):
         loss = 0
         print_losses = []
         n_totals = 0
+        batch_size = 71
         
         input_variable = input_variable.to(self.device)
         motion_variable = motion_variable.to(self.device)
@@ -618,9 +619,9 @@ class ORG_TRL(nn.Module):
             v_features = self.encoder(input_variable, motion_variable)
         
         # Forward pass through encoder
-        decoder_input = torch.LongTensor([[self.cfg.SOS_token for _ in range(10)]])\
+        decoder_input = torch.LongTensor([[self.cfg.SOS_token for _ in range(batch_size)]])\
             .to(self.device)
-        decoder_hidden = torch.zeros(self.cfg.n_layers, 10,
+        decoder_hidden = torch.zeros(self.cfg.n_layers, batch_size,
                                      self.cfg.decoder_hidden_size).to(self.device)
         
         if self.cfg.decoder_type == 'lstm':
@@ -645,6 +646,7 @@ class ORG_TRL(nn.Module):
                 loss += mask_loss
                 print_losses.append(mask_loss.item() * nTotal)
                 n_totals += nTotal
+                
         else:
             for t in range(max_target_len):
                 decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
