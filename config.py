@@ -105,7 +105,7 @@ class ConfigORGTRL:
         self.motion_feature_extractor = 'resnext101'
         self.frame_len = 8
         self.motion_depth = 16  
-        self.appearance_input_size = 1536
+        self.appearance_input_size = 2048
         self.appearance_projected_size = 512
         self.motion_input_size = 2048
         self.motion_projected_size = 512

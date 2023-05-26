@@ -20,7 +20,7 @@ class Vocabulary:
         self.num_words = 2
 
         if gloVe is True:
-            glove_path = os.path.join('gloVe', 'glove_init_1000.npy')
+            glove_path = os.path.join('gloVe', 'glove_init_vocab.npy')
             self.gloVe_embedding = np.load(glove_path)
         
     def addSentence(self,sentence): #Add Sentence to vocabulary
