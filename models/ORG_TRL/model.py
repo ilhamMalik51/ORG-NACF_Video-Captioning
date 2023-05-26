@@ -580,14 +580,15 @@ class ORG_TRL(nn.Module):
                                   motion_features, 
                                   targets, 
                                   mask, 
-                                  max_length)
+                                  max_length,
+                                  use_teacher_forcing)
             print_loss += loss
             total_loss += loss
         return total_loss/len(dataloader)
         
     @torch.no_grad()
     def eval_iter(self, utils, input_variable, motion_variable,
-                  target_variable, mask, max_target_len):
+                  target_variable, mask, max_target_len, use_teacher_forcing):
         '''
         Forward propagate input signal and update model for a single iteration. 
         Args:
@@ -627,25 +628,45 @@ class ORG_TRL(nn.Module):
             decoder_hidden_lang = (decoder_hidden, decoder_hidden)
         
         # concat the input and motion variable
-        # v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device)        
-        for t in range(max_target_len):
-            decoder_output, decoder_hidden_attn, decoder_hidden_lang =\
-                self.decoder(decoder_input, decoder_hidden_attn, decoder_hidden_lang, 
-                             v_features)
-            
-            # No teacher forcing: next input is decoder's own current output(model distribution)
-            _, topi = decoder_output.squeeze(0).topk(1)
+        # v_features = torch.cat((input_variable, motion_variable), dim=-1).to(self.device)
+        if use_teacher_forcing:
+            for t in range(max_target_len):
+                decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
+                                                                                        decoder_hidden_attn,
+                                                                                        decoder_hidden_lang, 
+                                                                                        v_features)
+                
+                # Teacher forcing: next input comes from ground truth(data distribution)
+                decoder_input = target_variable[t].view(1, -1)
+                mask_loss, nTotal = utils.maskNLLLoss(decoder_output.unsqueeze(0), 
+                                                      target_variable[t], 
+                                                      mask[t], 
+                                                      self.device)
+                loss += mask_loss
+                print_losses.append(mask_loss.item() * nTotal)
+                n_totals += nTotal
+        else:
+            for t in range(max_target_len):
+                decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
+                                                                                        decoder_hidden_attn,
+                                                                                        decoder_hidden_lang, 
+                                                                                        v_features.float())
+                
+                # No teacher forcing: next input is decoder's own current output(model distribution)
+                _, topi = decoder_output.squeeze(0).topk(1)
 
-            decoder_input = torch.LongTensor([[topi[i][0] for i in range(10)]])
+                decoder_input = torch.LongTensor([[topi[i][0] for i in range(self.cfg.batch_size)]])
 
-            decoder_input = decoder_input.to(self.device)            
-            # Calculate and accumulate loss
-            mask_loss, nTotal = utils.maskNLLLoss(decoder_output, target_variable[t], 
-                                                  mask[t], self.device)
-            
-            loss += mask_loss
-            print_losses.append(mask_loss.item() * nTotal)
-            n_totals += nTotal
+                decoder_input = decoder_input.to(self.device)
+                # Calculate and accumulate loss
+                mask_loss, nTotal = utils.maskNLLLoss(decoder_output, 
+                                                      target_variable[t], 
+                                                      mask[t],
+                                                      self.device)
+                
+                loss += mask_loss
+                print_losses.append(mask_loss.item() * nTotal)
+                n_totals += nTotal
         
         return sum(print_losses) / n_totals
 
