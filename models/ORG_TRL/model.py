@@ -288,6 +288,7 @@ class ORG_TRL(nn.Module):
         if os.path.exists(encoder_path) and os.path.exists(decoder_path):
             self.encoder.load_state_dict(torch.load(encoder_path))
             self.decoder.load_state_dict(torch.load(decoder_path))
+            print('Weight loaded sucessfully')
         else:
             print('File not found Error..')
 
