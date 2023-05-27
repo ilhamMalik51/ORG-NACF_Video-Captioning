@@ -264,14 +264,14 @@ class DataHandler:
 
         val_loader = DataLoader(val_dset, 
                                 batch_size=71, 
-                                num_workers=4, 
+                                num_workers=2, 
                                 shuffle=False,
                                 collate_fn=collate_fn,
                                 drop_last=False)
         
         test_loader = DataLoader(test_dset, 
                                  batch_size=100, 
-                                 num_workers=4,
+                                 num_workers=2,
                                  shuffle=False,
                                  collate_fn=collate_fn,
                                  drop_last=False)
