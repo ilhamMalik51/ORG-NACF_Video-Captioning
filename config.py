@@ -62,9 +62,9 @@ class Path:
                 self.appearance_feature_file = os.path.join(self.feature_path,'MSRVTT_APPEARANCE_INCEPTIONRESNETV2_28.hdf5')
                 
             if cfg.appearance_feature_extractor == 'resnet101':
-                self.appearance_feature_file = os.path.join(self.feature_path,'MSRVTT_APPEARANCE_RESNET_8.hdf5')
+                self.appearance_feature_file = os.path.join(self.feature_path,'MSRVTT_APPEARANCE_RESNET_28.hdf5')
 
-            self.motion_feature_file = os.path.join(self.feature_path,'MSRVTT_MOTION_RESNEXT101_8.hdf5')
+            self.motion_feature_file = os.path.join(self.feature_path,'MSRVTT_MOTION_RESNEXT101.hdf5')
             # self.object_feature_file = os.path.join(self.feature_path,'MSRVTT_OBJECT_FASTERRCNN_RESNEXT_28.hdf5')
 
             self.val_id_list = list(range(6513,7010))
