@@ -161,8 +161,6 @@ class DecoderRNN(nn.Module):
         # CHECK NEW
         self.temporal_attention = TemporalAttention(cfg)
 
-        self.embedding_dropout = nn.Dropout(cfg.dropout)
-
         self.language_lstm = nn.LSTM(input_size=cfg.language_lstm_input_size, 
                                      hidden_size=cfg.decoder_hidden_size,
                                      num_layers=self.n_layers, 
@@ -202,6 +200,8 @@ class DecoderRNN(nn.Module):
         # global mean pooled the v features
         v_bar_features = torch.mean(v_features, dim=1, keepdim=True).squeeze(1).unsqueeze(0)
         
+        v_bar_features = self.embedding_dropout(v_bar_features)
+        
         # preparing the input for lstm
         # concat [v_bar, word_emb, h_lang_prev] shape(512 + 300 + 512)
         input_attn_lstm = torch.cat((v_bar_features, embedded, lang_hidden[0]), dim=-1)
@@ -220,9 +220,12 @@ class DecoderRNN(nn.Module):
         # context global vector
         # is the product of element-wise multiplication of
         # attention weight and v_features (batch_size, features_size * 2)
+        last_hidden_attn = self.embedding_dropout(last_hidden_attn)
 
         context_global_vector, alpha = self.temporal_attention(last_hidden_attn, v_features)
 
+        context_global_vector = self.embedding_dropout(context_global_vector)
+        
         # concat [c_global, c_local, h_attn] (3, 128, 512) (L, N, dim_feature)
         input_lang_lstm = torch.cat((context_global_vector.unsqueeze(0),
                                      h_attn_lstm[0]), dim=-1)
@@ -230,7 +233,11 @@ class DecoderRNN(nn.Module):
         output, h_lang_lstm = self.language_lstm(input_lang_lstm, lang_hidden) # (1, 100, 512)
         
         output = output.squeeze(0) # (batch_size, features_From LSTM) (128, 512)
+
+        output = self.embedding_dropout(output)
+
         output = self.out(output) # (batch_size, vocabulary_size) (128, num_words)
+        
         output = F.softmax(output, dim = 1) # In Probability Value (batch_size, vocabulary_size) (128, num_words)
         
         return output, h_attn_lstm, h_lang_lstm

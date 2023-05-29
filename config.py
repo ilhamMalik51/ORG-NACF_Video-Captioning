@@ -103,7 +103,7 @@ class ConfigORGTRL:
         # Encoder configuration
         self.appearance_feature_extractor = 'resnet101'
         self.motion_feature_extractor = 'resnext101'
-        self.frame_len = 8
+        self.frame_len = 28
         self.motion_depth = 16  
         self.appearance_input_size = 2048
         self.appearance_projected_size = 512
@@ -113,12 +113,12 @@ class ConfigORGTRL:
         self.encoder_input_size = 2048
         self.encoder_projected_size = 512
         self.encoder_dropout_size = 0.5
-        # New Configuration
-        self.object_input_size = 1024
-        self.object_projected_size = 512
-        self.object_kernel_size = (1, 1)
-        self.opt_encoder = opt_encoder
         
+        # New Configuration
+        # self.object_input_size = 1024
+        # self.object_projected_size = 512
+        # self.object_kernel_size = (1, 1)
+        # self.opt_encoder = opt_encoder
         
         #Decoder configuration
         self.decoder_type = 'lstm'
