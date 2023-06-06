@@ -666,8 +666,8 @@ class ORG_TRL(nn.Module):
                 _, topi = decoder_output.squeeze(0).topk(1)
 
                 decoder_input = torch.LongTensor([[topi[i][0] for i in range(self.cfg.batch_size)]])
-
                 decoder_input = decoder_input.to(self.device)
+                
                 # Calculate and accumulate loss
                 mask_loss, nTotal = utils.maskNLLLoss(decoder_output, 
                                                       target_variable[t], 
@@ -684,20 +684,16 @@ class ORG_TRL(nn.Module):
     def GreedyDecoding(self, 
                        features, 
                        motion_features,
-                       object_features, 
                        max_length=24
                        ):
         
         batch_size = features.size()[0]
         features = features.to(self.device)
         motion_features = motion_features.to(self.device)
-        object_features = object_features.to(self.device)
         
         if self.cfg.opt_encoder:
             # features, motion_features = self.encoder(features, motion_features) #need to make optional
-            v_features, r_obj_feats, r_hat = self.encoder(features, 
-                                                          motion_features,
-                                                          object_features)   
+            v_features  = self.encoder(features, motion_features)   
         
         decoder_input = torch.LongTensor([[self.cfg.SOS_token for _ in range(batch_size)]]).to(self.device)
         decoder_hidden = torch.zeros(self.cfg.n_layers, 
@@ -705,21 +701,19 @@ class ORG_TRL(nn.Module):
                                      self.cfg.decoder_hidden_size).to(self.device)
         
         if self.cfg.decoder_type == 'lstm':
-            decoder_hidden = (decoder_hidden,decoder_hidden)
+            decoder_hidden_attn = (decoder_hidden, decoder_hidden)
+            decoder_hidden_lang = (decoder_hidden, decoder_hidden)
 
         caption = []
-        attention_values = []
 
         for _ in range(max_length):
-            decoder_output, decoder_hidden, attn_values = self.decoder(decoder_input, 
-                                                                       decoder_hidden,
-                                                                       features.float(),
-                                                                       motion_features.float(),
-                                                                       )
+            decoder_output, decoder_hidden_attn, decoder_hidden_lang = self.decoder(decoder_input,
+                                                                                    decoder_hidden_attn,
+                                                                                    decoder_hidden_lang, 
+                                                                                    v_features.float())
             _, topi = decoder_output.squeeze(0).topk(1)
             decoder_input = torch.LongTensor([[topi[i][0] for i in range(batch_size)]]).to(self.device)
             caption.append(topi.squeeze(1).cpu())
-            attention_values.append(attn_values.squeeze(2))
 
         caption = torch.stack(caption, 0).permute(1, 0)
         caps_text = []
@@ -734,7 +728,7 @@ class ORG_TRL(nn.Module):
             tmp = ' '.join(x for x in tmp)
             caps_text.append(tmp)
 
-        return caption, caps_text, torch.stack(attention_values,0).cpu().numpy()
+        return caps_text
     
 
     @torch.no_grad()

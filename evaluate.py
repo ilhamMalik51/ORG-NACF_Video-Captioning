@@ -43,9 +43,9 @@ class Evaluator:
                 features, targets, mask, max_length,ides,motion_feat,object_feat= data
                     
                 if self.cfg.model_name == 'sa-lstm':
-                    # if self.decoding_type == 'greedy':
-                    #     cap, cap_txt, _ = model.GreedyDecoding(features.to(self.cfg.device),
-                    #                                          motion_feat.to(self.cfg.device))
+                    if self.decoding_type == 'greedy':
+                        cap_txt = model.GreedyDecoding(features.to(self.cfg.device),
+                                                             motion_feat.to(self.cfg.device))
                         
                     if self.decoding_type == 'beam':
                         cap_txt = model.BeamDecoding(features.to(self.cfg.device), 
